@@ -72,9 +72,19 @@ export function explainMapDraft({
   draft,
   takenAgentIds = new Set(),
   agents = AGENTS,
+  mapStrength = 0,
 }) {
   const intel = getMapIntel(mapId);
   if (!intel || !draft?.length) return [];
+  // At Role Balanced the map data touched nothing, so the panel must not imply
+  // it did. Saying "these were chosen because of the map" when the weight was
+  // zero is the single most misleading thing this screen could do.
+  if (mapStrength <= 0) {
+    return [
+      `Your draft ignored this map entirely — Role Balanced applies no map influence. Shown for interest only.`,
+      describeMapEvidence(mapId),
+    ];
+  }
   const byId = new Map(agents.map((agent) => [agent.id, agent]));
   const highlighted = draft
     .filter((agent) => (intel.agentWeights[agent.id] || 1) > 1)
@@ -88,11 +98,11 @@ export function explainMapDraft({
 
   if (highlighted.length) {
     reasons.push(
-      `${highlighted.map((agent) => agent.name).join(", ")} ${highlighted.length === 1 ? "is" : "are"} among ${intel.map.name}’s stronger local data signals.`,
+      `${highlighted.map((agent) => agent.name).join(", ")} ${highlighted.length === 1 ? "is" : "are"} among the agents seen most often on ${intel.map.name} in our snapshot.`,
     );
   } else {
     reasons.push(
-      "Ownership and hard composition rules took priority; the legal result did not include a highlighted map pick.",
+      `Nobody in this squad is a frequent ${intel.map.name} pick in our snapshot. That is not a problem — it just means the draft landed elsewhere.`,
     );
   }
 
@@ -107,20 +117,41 @@ export function explainMapDraft({
     );
   }
 
-  if (intel.confidence !== "high") {
-    reasons.push(
-      `${intel.confidence[0].toUpperCase()}${intel.confidence.slice(1)} confidence: only ${intel.sampleSize} observed map appearances were available in this snapshot.`,
-    );
-  }
+  reasons.push(describeMapEvidence(mapId));
   return reasons;
 }
 
+/**
+ * The most-seen agents on a map, in order, without numbers.
+ *
+ * The snapshot sizes range from 26 appearances to 634. Printing "57.7%" off 26
+ * observations implies a precision the sample cannot carry — that figure is
+ * 15 of 26, and one more game moves it four points. Order survives a small
+ * sample; a decimal place does not. So every map shows a ranked list and the
+ * raw count of games behind it, and the reader judges the weight themselves.
+ */
 export function observedAgentNames(mapId, agents = AGENTS, limit = 4) {
   const intel = getMapIntel(mapId);
   if (!intel) return [];
   const byId = new Map(agents.map((agent) => [agent.id, agent]));
-  return intel.observed.slice(0, limit).map(({ agentId, pickRate }) => ({
-    name: byId.get(agentId)?.name || agentId,
-    pickRate,
-  }));
+  return intel.observed
+    .slice(0, limit)
+    .map(({ agentId }) => byId.get(agentId)?.name || agentId);
+}
+
+/**
+ * Plain-language disclosure of how much data sits behind a map. Confidence is
+ * never applied to the weighting — every map is treated identically by the
+ * solver — so this exists purely to let the reader discount what they see.
+ */
+export function describeMapEvidence(mapId) {
+  const intel = getMapIntel(mapId);
+  if (!intel) return "";
+  if (intel.confidence === "high") {
+    return `Drawn from ${intel.sampleSize} recorded games on this map — enough to be worth reading.`;
+  }
+  if (intel.confidence === "medium") {
+    return `Drawn from ${intel.sampleSize} recorded games. A moderate sample, so treat the order as a hint rather than a fact.`;
+  }
+  return `Drawn from only ${intel.sampleSize} recorded games. That is too few to be reliable — a handful of matches could reorder this entirely.`;
 }

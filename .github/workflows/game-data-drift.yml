@@ -1,0 +1,77 @@
+name: Game data drift
+
+# There is no official endpoint for the map rotation or agent pick rates, so
+# map-meta.js stays a reviewed, dated snapshot. This job doesn't edit it — it
+# watches for drift and files an issue so a human knows to look.
+on:
+  schedule:
+    # Tuesdays 06:00 UTC, shortly after Riot's usual patch window.
+    - cron: "0 6 * * 2"
+  workflow_dispatch:
+
+permissions:
+  contents: read
+  issues: write
+
+jobs:
+  check:
+    runs-on: ubuntu-latest
+    steps:
+      - name: Check out repository
+        uses: actions/checkout@v4
+
+      - name: Use Node.js 22
+        uses: actions/setup-node@v4
+        with:
+          node-version: 22
+
+      - name: Compare local data against the live game
+        id: check
+        run: |
+          set +e
+          node scripts/check-game-data.js > drift.txt 2>&1
+          echo "status=$?" >> "$GITHUB_OUTPUT"
+          cat drift.txt
+
+      - name: Open or update a drift issue
+        if: steps.check.outputs.status == '2'
+        uses: actions/github-script@v7
+        with:
+          script: |
+            const fs = require("fs");
+            const report = fs.readFileSync("drift.txt", "utf8");
+            const title = "Game data drift detected";
+            const body = [
+              "The live game has moved past our local snapshot.",
+              "",
+              "```",
+              report.trim(),
+              "```",
+              "",
+              "Nothing has been changed automatically — the map weights are a",
+              "reviewed snapshot and a human should refresh them.",
+            ].join("\n");
+
+            const existing = await github.rest.issues.listForRepo({
+              owner: context.repo.owner,
+              repo: context.repo.repo,
+              state: "open",
+              labels: "data-drift",
+            });
+
+            if (existing.data.length) {
+              await github.rest.issues.createComment({
+                owner: context.repo.owner,
+                repo: context.repo.repo,
+                issue_number: existing.data[0].number,
+                body,
+              });
+            } else {
+              await github.rest.issues.create({
+                owner: context.repo.owner,
+                repo: context.repo.repo,
+                title,
+                body,
+                labels: ["data-drift"],
+              });
+            }

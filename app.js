@@ -35,6 +35,7 @@ import {
   explainMapDraft,
   getCompositionSummary,
   getMapIntel,
+  describeMapEvidence,
   observedAgentNames,
 } from "./logic/recommendations.js";
 import { formatDiscordResult } from "./logic/discord.js";
@@ -1092,18 +1093,31 @@ function renderMapIntel() {
   if (!intel) return;
   const heading = element("div", "map-intel-heading");
   heading.append(
-    element("strong", "", `${intel.map.name} · ${intel.confidence} confidence`),
-    element("span", "", `${intel.sampleSize} observed map appearances`),
+    element("strong", "", intel.map.name),
+    element("span", "", describeMapEvidence(selectedMapId)),
   );
-  body.append(heading, element("p", "", intel.intel));
+  body.append(heading);
+
   const observed = element("div", "map-observed");
-  observed.append(element("span", "", "Observed leaders"));
-  observedAgentNames(selectedMapId).forEach(({ name, pickRate }) => {
-    observed.append(element("b", "", `${name} ${pickRate}%`));
+  observed.append(element("span", "", "Seen most often, in order"));
+  observedAgentNames(selectedMapId).forEach((name, index) => {
+    observed.append(element("b", "", `${index + 1}. ${name}`));
   });
   body.append(observed);
+
+  body.append(
+    element(
+      "p",
+      "map-note",
+      resolveStructure(structurePosition).mapStrength > 0
+        ? "Map Smart reorders the legal options using this. It never makes an agent legal or illegal, and every map is weighted the same regardless of sample size."
+        : "This is not affecting your draft at the current structure setting.",
+    ),
+  );
   const source = element("p", "map-source");
-  source.append(document.createTextNode(`Patch 13.04 · snapshot ${intel.updatedAt} · `));
+  source.append(
+    document.createTextNode(`Patch ${intel.version.split("-")[0]} · snapshot ${intel.updatedAt} · `),
+  );
   const link = element("a", "", "public Agent Stats source");
   link.href = intel.sources.agentStats;
   link.target = "_blank";
@@ -1148,7 +1162,18 @@ function checkFeasibility() {
   $("#copy").disabled = !matchState.draft;
   $("#copyOpen").disabled = !matchState.draft;
   $(".share-actions").hidden = !matchState.draft;
-  $("#spinHint").textContent = matchState.draft ? "Active" : "Ready";
+  // The badge previously only knew whether a draft existed, so it read "Ready"
+  // with zero players and "Ready" when no legal comp was possible.
+  const hint = $("#spinHint");
+  const state = players.length === 0
+    ? { text: "Set up", tone: "idle" }
+    : !feasible
+      ? { text: "Blocked", tone: "bad" }
+      : matchState.draft
+        ? { text: "Locked in", tone: "locked" }
+        : { text: "Ready", tone: "ready" };
+  hint.textContent = state.text;
+  hint.dataset.tone = state.tone;
   $("#matchNumber").textContent = String(matchState.matchNumber).padStart(2, "0");
   $("#rerollCount").textContent = `${matchState.teamRedrawsRemaining} of ${REROLL_BUDGET} team redraws remaining`;
 
@@ -1309,12 +1334,13 @@ function renderCompositionSummary(assignment) {
   );
   container.append(heading);
 
-  if (selectedMapId && resolveStructure(structurePosition).mapStrength > 0) {
+  if (selectedMapId) {
     const reasons = explainMapDraft({
       mapId: selectedMapId,
       draft: assignment,
       takenAgentIds,
       agents: AGENTS,
+      mapStrength: resolveStructure(structurePosition).mapStrength,
     });
     if (reasons.length) {
       const list = element("ul", "map-reasons");

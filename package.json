@@ -6,6 +6,7 @@
   "scripts": {
     "test": "node --test",
     "fetch:art": "node scripts/fetch-agent-art.js",
+    "check:data": "node scripts/check-game-data.js",
     "test:fairness": "node --test tests/randomness.test.js"
   }
 }

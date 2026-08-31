@@ -938,6 +938,26 @@ button:disabled {
   color: var(--ink);
 }
 
+/* ─── STATUS BADGE ────────────────────────────────────────────────────
+   Colour tracks real feasibility, not just whether a draft exists.
+   ─────────────────────────────────────────────────────────────────── */
+#spinHint[data-tone="idle"] { color: var(--quiet); }
+#spinHint[data-tone="bad"] { color: var(--accent); }
+#spinHint[data-tone="ready"] { color: var(--go); }
+#spinHint[data-tone="locked"] { color: var(--ink); }
+
+/* Ranked names, never percentages — see logic/recommendations.js. */
+.map-observed b {
+  font-variant-numeric: tabular-nums;
+}
+
+.map-note {
+  margin: 8px 0 0;
+  color: var(--quiet);
+  font-size: 11px;
+  line-height: 1.5;
+}
+
 .mode-description {
   margin: 0;
   color: var(--muted);
