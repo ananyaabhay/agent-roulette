@@ -29,8 +29,8 @@
       href="https://fonts.googleapis.com/css2?family=Big+Shoulders+Display:wght@600;700;800;900&family=IBM+Plex+Mono:wght@400;500;600&family=IBM+Plex+Sans:wght@400;500;600;700&display=swap"
       rel="stylesheet"
     />
-    <link rel="stylesheet" href="./styles.css?v=1.4.0" />
-    <script type="module" src="./app.js?v=1.4.0"></script>
+    <link rel="stylesheet" href="./styles.css?v=1.5.0" />
+    <script type="module" src="./app.js?v=1.5.0"></script>
   </head>
   <body>
     <div class="app-shell">
@@ -43,7 +43,7 @@
           </span>
         </a>
         <div class="build-stamp" aria-label="Application details">
-          <span>V1.4</span>
+          <span>V1.5</span>
           <span>Local profiles</span>
         </div>
       </header>
@@ -96,7 +96,7 @@
           <details class="team-needs">
             <summary>
               <span>
-                <span class="eyebrow">Role Balanced intel</span>
+                <span class="eyebrow">Composition intel</span>
                 <strong id="teamNeedsTitle">Team needs</strong>
               </span>
               <span class="needs-signal" id="teamNeedsSignal">Add players</span>
@@ -123,15 +123,31 @@
 
           <div class="mode-row">
             <div class="mode-rail" role="group" aria-label="Draft mode">
+              <button id="modeChaos" type="button" aria-pressed="false">
+                Full Chaos
+              </button>
               <button id="modeBalanced" type="button" aria-pressed="true">
                 Role Balanced
               </button>
-              <button id="modeChaos" type="button" aria-pressed="false">
-                Full Chaos
+              <button id="modeMap" type="button" aria-pressed="false">
+                Map Smart
               </button>
             </div>
             <p class="mode-description" id="modeDescription"></p>
           </div>
+
+          <section class="map-panel" id="mapPanel" aria-labelledby="mapLabel" hidden>
+            <label for="mapSelect" id="mapLabel">
+              <span class="eyebrow">Current map</span>
+              <select id="mapSelect" required>
+                <option value="">Choose a map</option>
+              </select>
+            </label>
+            <details class="map-intel" id="mapIntel">
+              <summary>Map Intel</summary>
+              <div id="mapIntelBody"></div>
+            </details>
+          </section>
 
           <div class="status" id="status" role="status" aria-live="polite">
             <span class="status-dot" aria-hidden="true"></span>
@@ -142,6 +158,7 @@
           </div>
 
           <div class="results" id="results"></div>
+          <div class="composition-summary" id="compositionSummary" hidden></div>
 
           <div class="draft-actions" aria-label="Draft actions">
             <button class="lock-button" id="roll" type="button">
@@ -150,9 +167,9 @@
             </button>
             <div class="reroll-control">
               <div class="reroll-readout">
-                <span class="match-label">Shared rerolls</span>
+                <span class="match-label">Team redraws</span>
                 <span class="reroll-dots" id="rerollDots" aria-hidden="true"></span>
-                <strong class="sr-only" id="rerollCount">3 of 3 rerolls remaining</strong>
+                <strong class="sr-only" id="rerollCount">3 of 3 team redraws remaining</strong>
               </div>
               <button class="button button--secondary" id="redraw" type="button" disabled>
                 Redraw unpinned
@@ -188,8 +205,8 @@
 
       <footer>
         <p>
-          Role Balanced uses owned agents and known teammate picks—not maps, meta,
-          win rate, synergy data, or player skill.
+          Role Balanced uses owned agents and known teammate picks. Map Smart adds
+          a local Patch 13.04 preference layer after those hard rules.
         </p>
         <p>
           Profiles stay on this device. Your active Match stays in this browser tab
@@ -199,6 +216,10 @@
           Agent Roulette isn’t endorsed by Riot Games and doesn’t reflect the views
           of Riot Games. VALORANT and all associated properties are trademarks or
           registered trademarks of Riot Games, Inc.
+        </p>
+        <p>
+          Agent art comes from Riot’s Public Content Catalog. Map signals are a
+          dated local snapshot, not live advice or a guarantee of performance.
         </p>
       </footer>
     </div>
