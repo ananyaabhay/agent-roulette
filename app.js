@@ -1337,6 +1337,7 @@ function renderCompositionSummary(assignment) {
   container.append(heading);
 
   if (selectedMapId) {
+    const intelMapName = MAP_BY_ID.get(selectedMapId)?.name || "Map";
     const reasons = explainMapDraft({
       mapId: selectedMapId,
       draft: assignment,
@@ -1345,6 +1346,9 @@ function renderCompositionSummary(assignment) {
       mapStrength: resolveStructure(structurePosition).mapStrength,
     });
     if (reasons.length) {
+      container.append(
+        element("span", "eyebrow map-notes-label", `${intelMapName} notes`),
+      );
       const list = element("ul", "map-reasons");
       reasons.forEach((reason) => list.append(element("li", "", reason)));
       container.append(list);

@@ -104,6 +104,9 @@ test("at zero map strength the panel says the draft ignored the map", () => {
   const reasons = explainMapDraft({ mapId: "abyss", draft, mapStrength: 0 });
   assert.match(reasons[0], /ignored this map entirely/);
   assert.ok(reasons.every((line) => !/\d+(\.\d+)?%/.test(line)));
+  // The evidence line belongs to the Map Intel panel; repeating it here showed
+  // the same sentence twice on one screen.
+  assert.ok(reasons.every((line) => !/recorded professional matches/.test(line)));
 });
 
 test("at full strength the panel describes observation, not recommendation", () => {
@@ -111,7 +114,7 @@ test("at full strength the panel describes observation, not recommendation", () 
   const reasons = explainMapDraft({ mapId: "abyss", draft, mapStrength: 4 });
   assert.match(reasons[0], /seen most often/);
   assert.doesNotMatch(reasons.join(" "), /signal/i);
-  assert.ok(reasons.some((line) => /too few to be reliable/.test(line)));
+  assert.ok(reasons.every((line) => !/recorded professional matches/.test(line)));
 });
 
 test("the panel discloses that the source is pro play, not the ladder", () => {

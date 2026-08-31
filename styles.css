@@ -1401,6 +1401,13 @@ button:disabled {
   font-size: 13px;
 }
 
+/* the "<Map> notes" label follows the composition line, so it needs air above */
+.map-notes-label {
+  display: block;
+  margin-top: 10px;
+  margin-bottom: 4px;
+}
+
 .map-reasons {
   display: grid;
   gap: 5px;

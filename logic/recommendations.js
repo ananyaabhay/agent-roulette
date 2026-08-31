@@ -81,8 +81,7 @@ export function explainMapDraft({
   // zero is the single most misleading thing this screen could do.
   if (mapStrength <= 0) {
     return [
-      `Your draft ignored this map entirely — Role Balanced applies no map influence. Shown for interest only.`,
-      describeMapEvidence(mapId),
+      "Your draft ignored this map entirely — Role Balanced applies no map influence.",
     ];
   }
   const byId = new Map(agents.map((agent) => [agent.id, agent]));
@@ -117,7 +116,6 @@ export function explainMapDraft({
     );
   }
 
-  reasons.push(describeMapEvidence(mapId));
   return reasons;
 }
 
