@@ -29,6 +29,10 @@ import {
 const byId = new Map(AGENTS.map((agent) => [agent.id, agent]));
 const allAgentIds = AGENTS.map((agent) => agent.id);
 
+// Personal budgets are lazily seeded, so an unseeded player still has a full budget.
+const personalRerolls = (matchState, playerId) =>
+  matchState.personalRerollsRemaining?.get(playerId) ?? REROLL_BUDGET;
+
 function player(id, ownedAgentIds = allAgentIds, name = id) {
   return { id, name, ownedAgentIds: new Set(ownedAgentIds), open: false };
 }
@@ -236,7 +240,8 @@ test("Spin creates one initial draft and cannot be repeated in an active Match",
   const first = spinInitialDraft(createMatchState(), setup);
   assert.equal(first.changed, true);
   assert.ok(first.state.draft);
-  assert.equal(first.state.rerollsRemaining, REROLL_BUDGET);
+  assert.equal(first.state.teamRedrawsRemaining, REROLL_BUDGET);
+  assert.equal(personalRerolls(first.state, "p1"), REROLL_BUDGET);
   const second = spinInitialDraft(first.state, setup);
   assert.equal(second.changed, false);
   assert.equal(second.reason, "match-active");
@@ -254,7 +259,7 @@ test("successful individual reroll changes the requested player and spends exact
   const result = attemptPlayerReroll(match, "p1", setup);
   assert.equal(result.changed, true);
   assert.equal(result.state.draft[0].id, "omen");
-  assert.equal(result.state.rerollsRemaining, REROLL_BUDGET - 1);
+  assert.equal(personalRerolls(result.state, "p1"), REROLL_BUDGET - 1);
   assert.ok(validateDraft({ ...setup, assignment: result.state.draft }));
 });
 
@@ -269,7 +274,7 @@ test("impossible individual reroll preserves the shared token", () => {
   );
   assert.equal(result.changed, false);
   assert.equal(result.reason, "no-alternative");
-  assert.equal(result.state.rerollsRemaining, REROLL_BUDGET);
+  assert.equal(personalRerolls(result.state, "p1"), REROLL_BUDGET);
 });
 
 test("cascade reroll protects pins and re-solves other unpinned players", () => {
@@ -289,7 +294,7 @@ test("cascade reroll protects pins and re-solves other unpinned players", () => 
     "brimstone",
     "phoenix",
   ]);
-  assert.equal(result.state.rerollsRemaining, REROLL_BUDGET - 1);
+  assert.equal(personalRerolls(result.state, "p1"), REROLL_BUDGET - 1);
   assert.ok(validateDraft({ ...setup, assignment: result.state.draft }));
 });
 
@@ -304,7 +309,7 @@ test("Redraw unpinned changes every unpinned slot and spends one token", () => {
   const result = redrawUnpinned(matchWithDraft(["phoenix", "jett"]), setup);
   assert.equal(result.changed, true);
   assert.deepEqual(result.state.draft.map((agent) => agent.id), ["jett", "phoenix"]);
-  assert.equal(result.state.rerollsRemaining, REROLL_BUDGET - 1);
+  assert.equal(result.state.teamRedrawsRemaining, REROLL_BUDGET - 1);
 });
 
 test("failed redraw and all-pinned redraw preserve the shared token", () => {
@@ -316,14 +321,14 @@ test("failed redraw and all-pinned redraw preserve the shared token", () => {
   const impossible = redrawUnpinned(match, setup);
   assert.equal(impossible.changed, false);
   assert.equal(impossible.reason, "no-alternative");
-  assert.equal(impossible.state.rerollsRemaining, REROLL_BUDGET);
+  assert.equal(impossible.state.teamRedrawsRemaining, REROLL_BUDGET);
   const allPinned = redrawUnpinned(
     togglePlayerPin(togglePlayerPin(match, "p1"), "p2"),
     setup,
   );
   assert.equal(allPinned.changed, false);
   assert.equal(allPinned.reason, "all-pinned");
-  assert.equal(allPinned.state.rerollsRemaining, REROLL_BUDGET);
+  assert.equal(allPinned.state.teamRedrawsRemaining, REROLL_BUDGET);
 });
 
 test("shared reroll budget cannot fall below zero", () => {
@@ -337,24 +342,24 @@ test("shared reroll budget cannot fall below zero", () => {
     assert.equal(result.changed, true);
     match = result.state;
   }
-  assert.equal(match.rerollsRemaining, 0);
+  assert.equal(personalRerolls(match, "p1"), 0);
   const blocked = attemptPlayerReroll(match, "p1", setup);
   assert.equal(blocked.changed, false);
   assert.equal(blocked.reason, "no-budget");
-  assert.equal(blocked.state.rerollsRemaining, 0);
+  assert.equal(personalRerolls(blocked.state, "p1"), 0);
 });
 
 test("New Match clears draft and pins and refills rerolls", () => {
   const active = {
     ...matchWithDraft(["brimstone", "sage"], ["p1"]),
-    rerollsRemaining: 0,
+    teamRedrawsRemaining: 0,
     matchNumber: 4,
   };
   const fresh = startNewMatch(active);
   assert.equal(fresh.matchNumber, 5);
   assert.equal(fresh.draft, null);
   assert.equal(fresh.pinnedPlayerIds.size, 0);
-  assert.equal(fresh.rerollsRemaining, REROLL_BUDGET);
+  assert.equal(fresh.teamRedrawsRemaining, REROLL_BUDGET);
 });
 
 test("harmless active setup changes preserve the current draft and budget", () => {
@@ -364,12 +369,12 @@ test("harmless active setup changes preserve the current draft and budget", () =
       player("p2", ["sage", "cypher"]),
     ],
   });
-  const match = { ...matchWithDraft(["brimstone", "sage"]), rerollsRemaining: 1 };
+  const match = { ...matchWithDraft(["brimstone", "sage"]), teamRedrawsRemaining: 1 };
   setup.players[0].ownedAgentIds.add("jett");
   const result = reconcileActiveMatch(match, setup);
   assert.equal(result.reason, "still-valid");
   assert.strictEqual(result.state, match);
-  assert.equal(result.state.rerollsRemaining, 1);
+  assert.equal(result.state.teamRedrawsRemaining, 1);
 });
 
 test("a conflicting outside pick rebuilds the active draft without spending a reroll", () => {
@@ -379,7 +384,7 @@ test("a conflicting outside pick rebuilds the active draft without spending a re
   ];
   const match = {
     ...matchWithDraft(["brimstone", "sage"], ["p1"]),
-    rerollsRemaining: 1,
+    teamRedrawsRemaining: 1,
   };
   const nextContext = context({
     players: setupPlayers,
@@ -388,7 +393,7 @@ test("a conflicting outside pick rebuilds the active draft without spending a re
   const result = reconcileActiveMatch(match, nextContext);
   assert.equal(result.reason, "resolved");
   assert.equal(result.changed, true);
-  assert.equal(result.state.rerollsRemaining, 1);
+  assert.equal(result.state.teamRedrawsRemaining, 1);
   assert.ok(result.releasedPinIds.includes("p1"));
   assert.ok(validateDraft({ ...nextContext, assignment: result.state.draft }));
 });

@@ -47,7 +47,7 @@ test("squad reveal and shared reroll presentation are wired", async () => {
     readFile(cssUrl, "utf8"),
   ]);
   assert.match(htmlSource, /Lock us in/);
-  assert.match(appSource, /agent-mark/);
+  assert.match(appSource, /agent-portrait/);
   assert.match(appSource, /rerolls remaining/);
   assert.match(cssSource, /\.reroll-dot\s*\{/);
   assert.match(cssSource, /border-radius:\s*50%/);

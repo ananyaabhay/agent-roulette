@@ -11,7 +11,7 @@ export function formatDiscordResult({
   draft,
   players,
   pinnedPlayerIds,
-  personalRerollsRemaining,
+  personalRerollsRemaining = new Map(),
   teamRedrawsRemaining,
   rerollBudget,
   takenAgentIds,
