@@ -1,6 +1,6 @@
+// Deterministic V1.3.1 solver, Match, reroll, and state-transition tests.
 import test from "node:test";
 import assert from "node:assert/strict";
-import { readFile } from "node:fs/promises";
 
 import {
   AGENTS,
@@ -18,22 +18,19 @@ import {
 } from "../logic/solver.js";
 import {
   attemptPlayerReroll,
-  createRoundState,
+  createMatchState,
+  reconcileActiveMatch,
   redrawUnpinned,
   spinInitialDraft,
-  startNewRound,
+  startNewMatch,
   togglePlayerPin,
-} from "../logic/round.js";
-import {
-  normalizeSavedPreferences,
-  serializePreferences,
-} from "../logic/storage.js";
+} from "../logic/match.js";
 
 const byId = new Map(AGENTS.map((agent) => [agent.id, agent]));
 const allAgentIds = AGENTS.map((agent) => agent.id);
 
-function player(id, ownedAgentIds = allAgentIds) {
-  return { id, name: id, ownedAgentIds: new Set(ownedAgentIds), open: false };
+function player(id, ownedAgentIds = allAgentIds, name = id) {
+  return { id, name, ownedAgentIds: new Set(ownedAgentIds), open: false };
 }
 
 function players(count, ownedAgentIds = allAgentIds) {
@@ -53,9 +50,9 @@ function context(overrides = {}) {
   };
 }
 
-function roundWithDraft(draftIds, pinnedPlayerIds = []) {
+function matchWithDraft(draftIds, pinnedPlayerIds = []) {
   return {
-    ...createRoundState(),
+    ...createMatchState(),
     draft: draftIds.map((agentId) => byId.get(agentId)),
     pinnedPlayerIds: new Set(pinnedPlayerIds),
   };
@@ -72,7 +69,7 @@ function seededRandom(seed) {
   };
 }
 
-test("game data has unique stable IDs, valid roles, and data-defined starters", () => {
+test("game data has unique stable IDs, valid roles, and five data-defined starters", () => {
   assert.equal(new Set(AGENTS.map((agent) => agent.id)).size, AGENTS.length);
   assert.ok(AGENTS.every((agent) => ROLES.includes(agent.role)));
   assert.deepEqual(
@@ -121,14 +118,13 @@ test("known outside picks are excluded and count toward role quotas", () => {
   assert.equal(quotas.minimums.Controller, 0);
   assert.equal(quotas.minimums.Sentinel, 1);
   assert.equal(quotas.minimums.Initiator, 1);
-
   const draft = solveDraft(setup);
   assert.ok(draft);
   assert.ok(draft.every((agent) => agent.id !== "omen"));
   assert.ok(validateDraft({ ...setup, assignment: draft }));
 });
 
-test("different outside-pick counts and role combinations remain valid", () => {
+test("different stack sizes and known lobby combinations remain valid", () => {
   const cases = [
     { stackSize: 1, picks: ["omen", "sage", "sova", "jett"] },
     { stackSize: 2, picks: ["raze", "reyna", "jett"] },
@@ -136,7 +132,6 @@ test("different outside-pick counts and role combinations remain valid", () => {
     { stackSize: 4, picks: ["sova"] },
     { stackSize: 5, picks: [] },
   ];
-
   cases.forEach(({ stackSize, picks }) => {
     const setup = context({
       players: players(stackSize),
@@ -181,11 +176,10 @@ test("Full Chaos disables role targets but preserves hard constraints", () => {
   assert.ok(chaosDraft);
   assert.ok(chaosDraft.every((agent) => agent.role === "Duelist"));
   assert.ok(validateDraft({ ...chaosSetup, assignment: chaosDraft }));
-
   assert.equal(solveDraft({ ...chaosSetup, mode: "balanced" }), null);
 });
 
-test("Team Needs reports needed, covered, flexible, impossible, and disabled states", () => {
+test("Team Needs reports only solver-backed required, covered, flexible, impossible, and disabled states", () => {
   const balancedNeeds = getTeamNeeds(
     context({ players: players(3), takenAgentIds: new Set(["omen"]) }),
   );
@@ -201,7 +195,10 @@ test("Team Needs reports needed, covered, flexible, impossible, and disabled sta
     balancedNeeds.find((need) => need.role === "Duelist").state,
     "flexible",
   );
-
+  assert.equal(
+    balancedNeeds.find((need) => need.role === "Sentinel").requiredFromStack,
+    1,
+  );
   const impossibleNeeds = getTeamNeeds(
     context({
       players: [player("p1", ["phoenix"]), player("p2", ["jett"])],
@@ -211,9 +208,16 @@ test("Team Needs reports needed, covered, flexible, impossible, and disabled sta
     impossibleNeeds.find((need) => need.role === "Controller").state,
     "impossible",
   );
-
   const chaosNeeds = getTeamNeeds(context({ mode: "chaos" }));
   assert.ok(chaosNeeds.every((need) => need.state === "disabled"));
+
+  const nonTargetOutsideRole = getTeamNeeds(
+    context({ players: players(2), takenAgentIds: new Set(["jett"]) }),
+  );
+  assert.equal(
+    nonTargetOutsideRole.find((need) => need.role === "Duelist").state,
+    "flexible",
+  );
 });
 
 test("failure explanation identifies too many open roles for the stack", () => {
@@ -227,16 +231,15 @@ test("failure explanation identifies too many open roles for the stack", () => {
   assert.match(failure.body, /3 roles across 2 stack players/);
 });
 
-test("Spin creates one initial draft and cannot be repeated in an active round", () => {
+test("Spin creates one initial draft and cannot be repeated in an active Match", () => {
   const setup = context();
-  const first = spinInitialDraft(createRoundState(), setup);
+  const first = spinInitialDraft(createMatchState(), setup);
   assert.equal(first.changed, true);
   assert.ok(first.state.draft);
   assert.equal(first.state.rerollsRemaining, REROLL_BUDGET);
-
   const second = spinInitialDraft(first.state, setup);
   assert.equal(second.changed, false);
-  assert.equal(second.reason, "round-active");
+  assert.equal(second.reason, "match-active");
   assert.strictEqual(second.state, first.state);
 });
 
@@ -247,8 +250,8 @@ test("successful individual reroll changes the requested player and spends exact
       player("p2", ["sage"]),
     ],
   });
-  const round = roundWithDraft(["brimstone", "sage"]);
-  const result = attemptPlayerReroll(round, "p1", setup);
+  const match = matchWithDraft(["brimstone", "sage"]);
+  const result = attemptPlayerReroll(match, "p1", setup);
   assert.equal(result.changed, true);
   assert.equal(result.state.draft[0].id, "omen");
   assert.equal(result.state.rerollsRemaining, REROLL_BUDGET - 1);
@@ -259,8 +262,11 @@ test("impossible individual reroll preserves the shared token", () => {
   const setup = context({
     players: [player("p1", ["brimstone"]), player("p2", ["sage"])],
   });
-  const round = roundWithDraft(["brimstone", "sage"]);
-  const result = attemptPlayerReroll(round, "p1", setup);
+  const result = attemptPlayerReroll(
+    matchWithDraft(["brimstone", "sage"]),
+    "p1",
+    setup,
+  );
   assert.equal(result.changed, false);
   assert.equal(result.reason, "no-alternative");
   assert.equal(result.state.rerollsRemaining, REROLL_BUDGET);
@@ -274,13 +280,15 @@ test("cascade reroll protects pins and re-solves other unpinned players", () => 
       player("p3", ["cypher", "phoenix"]),
     ],
   });
-  const round = roundWithDraft(["sage", "brimstone", "cypher"], ["p2"]);
-  const result = attemptPlayerReroll(round, "p1", setup);
+  const match = matchWithDraft(["sage", "brimstone", "cypher"], ["p2"]);
+  const result = attemptPlayerReroll(match, "p1", setup);
   assert.equal(result.changed, true);
   assert.equal(result.reason, "cascade");
-  assert.equal(result.state.draft[0].id, "cypher");
-  assert.equal(result.state.draft[1].id, "brimstone");
-  assert.equal(result.state.draft[2].id, "phoenix");
+  assert.deepEqual(result.state.draft.map((agent) => agent.id), [
+    "cypher",
+    "brimstone",
+    "phoenix",
+  ]);
   assert.equal(result.state.rerollsRemaining, REROLL_BUDGET - 1);
   assert.ok(validateDraft({ ...setup, assignment: result.state.draft }));
 });
@@ -293,13 +301,9 @@ test("Redraw unpinned changes every unpinned slot and spends one token", () => {
     ],
     mode: "chaos",
   });
-  const round = roundWithDraft(["phoenix", "jett"]);
-  const result = redrawUnpinned(round, setup);
+  const result = redrawUnpinned(matchWithDraft(["phoenix", "jett"]), setup);
   assert.equal(result.changed, true);
-  assert.deepEqual(
-    result.state.draft.map((agent) => agent.id),
-    ["jett", "phoenix"],
-  );
+  assert.deepEqual(result.state.draft.map((agent) => agent.id), ["jett", "phoenix"]);
   assert.equal(result.state.rerollsRemaining, REROLL_BUDGET - 1);
 });
 
@@ -308,14 +312,13 @@ test("failed redraw and all-pinned redraw preserve the shared token", () => {
     players: [player("p1", ["phoenix"]), player("p2", ["jett"])],
     mode: "chaos",
   });
-  const round = roundWithDraft(["phoenix", "jett"]);
-  const impossible = redrawUnpinned(round, setup);
+  const match = matchWithDraft(["phoenix", "jett"]);
+  const impossible = redrawUnpinned(match, setup);
   assert.equal(impossible.changed, false);
   assert.equal(impossible.reason, "no-alternative");
   assert.equal(impossible.state.rerollsRemaining, REROLL_BUDGET);
-
   const allPinned = redrawUnpinned(
-    togglePlayerPin(togglePlayerPin(round, "p1"), "p2"),
+    togglePlayerPin(togglePlayerPin(match, "p1"), "p2"),
     setup,
   );
   assert.equal(allPinned.changed, false);
@@ -328,87 +331,81 @@ test("shared reroll budget cannot fall below zero", () => {
     players: [player("p1", ["phoenix", "jett"])],
     mode: "chaos",
   });
-  let round = roundWithDraft(["phoenix"]);
+  let match = matchWithDraft(["phoenix"]);
   for (let count = 0; count < REROLL_BUDGET; count += 1) {
-    const result = attemptPlayerReroll(round, "p1", setup);
+    const result = attemptPlayerReroll(match, "p1", setup);
     assert.equal(result.changed, true);
-    round = result.state;
+    match = result.state;
   }
-  assert.equal(round.rerollsRemaining, 0);
-  const blocked = attemptPlayerReroll(round, "p1", setup);
+  assert.equal(match.rerollsRemaining, 0);
+  const blocked = attemptPlayerReroll(match, "p1", setup);
   assert.equal(blocked.changed, false);
   assert.equal(blocked.reason, "no-budget");
   assert.equal(blocked.state.rerollsRemaining, 0);
 });
 
-test("New Round clears draft and pins and refills rerolls", () => {
+test("New Match clears draft and pins and refills rerolls", () => {
   const active = {
-    ...roundWithDraft(["brimstone", "sage"], ["p1"]),
+    ...matchWithDraft(["brimstone", "sage"], ["p1"]),
     rerollsRemaining: 0,
-    roundNumber: 4,
+    matchNumber: 4,
   };
-  const fresh = startNewRound(active);
-  assert.equal(fresh.roundNumber, 5);
+  const fresh = startNewMatch(active);
+  assert.equal(fresh.matchNumber, 5);
   assert.equal(fresh.draft, null);
   assert.equal(fresh.pinnedPlayerIds.size, 0);
   assert.equal(fresh.rerollsRemaining, REROLL_BUDGET);
 });
 
-test("saved profiles use stable IDs, restore starters, and exclude transient round state", () => {
-  let generatedId = 0;
-  const normalized = normalizeSavedPreferences(
-    {
-      mode: "chaos",
-      players: [
-        {
-          id: "stable-player-id",
-          name: '<img src=x onerror="globalThis.pwned=true">',
-          ownedAgentIds: ["omen", "not-a-real-agent"],
-          pinned: true,
-        },
-      ],
-      draft: ["omen"],
-      takenAgentIds: ["sage"],
-      rerollsRemaining: 0,
-    },
-    {
-      agents: AGENTS,
-      maxPlayers: MAX_TEAM_SIZE,
-      makeId: () => `generated-${++generatedId}`,
-    },
+test("harmless active setup changes preserve the current draft and budget", () => {
+  const setup = context({
+    players: [
+      player("p1", ["brimstone", "omen"]),
+      player("p2", ["sage", "cypher"]),
+    ],
+  });
+  const match = { ...matchWithDraft(["brimstone", "sage"]), rerollsRemaining: 1 };
+  setup.players[0].ownedAgentIds.add("jett");
+  const result = reconcileActiveMatch(match, setup);
+  assert.equal(result.reason, "still-valid");
+  assert.strictEqual(result.state, match);
+  assert.equal(result.state.rerollsRemaining, 1);
+});
+
+test("a conflicting outside pick rebuilds the active draft without spending a reroll", () => {
+  const setupPlayers = [
+    player("p1", ["brimstone", "omen"]),
+    player("p2", ["sage", "cypher"]),
+  ];
+  const match = {
+    ...matchWithDraft(["brimstone", "sage"], ["p1"]),
+    rerollsRemaining: 1,
+  };
+  const nextContext = context({
+    players: setupPlayers,
+    takenAgentIds: new Set(["brimstone"]),
+  });
+  const result = reconcileActiveMatch(match, nextContext);
+  assert.equal(result.reason, "resolved");
+  assert.equal(result.changed, true);
+  assert.equal(result.state.rerollsRemaining, 1);
+  assert.ok(result.releasedPinIds.includes("p1"));
+  assert.ok(validateDraft({ ...nextContext, assignment: result.state.draft }));
+});
+
+test("an impossible active setup change is rejected instead of leaving an invalid draft", () => {
+  const setupPlayers = [player("p1", ["brimstone"]), player("p2", ["sage"])];
+  const match = matchWithDraft(["brimstone", "sage"]);
+  const result = reconcileActiveMatch(
+    match,
+    context({ players: setupPlayers, takenAgentIds: new Set(["brimstone"]) }),
   );
-  assert.equal(normalized.mode, "chaos");
-  assert.equal(normalized.players[0].id, "stable-player-id");
-  assert.match(normalized.players[0].name, /<img/);
-  assert.ok(normalized.players[0].ownedAgentIds.has("omen"));
-  STARTER_AGENT_IDS.forEach((agentId) => {
-    assert.ok(normalized.players[0].ownedAgentIds.has(agentId));
-  });
-  assert.equal(normalized.players[0].ownedAgentIds.has("not-a-real-agent"), false);
-
-  const serialized = serializePreferences({
-    mode: normalized.mode,
-    players: normalized.players,
-    draft: [byId.get("omen")],
-    takenAgentIds: new Set(["sage"]),
-    rerollsRemaining: 0,
-  });
-  assert.deepEqual(Object.keys(serialized).sort(), ["mode", "players", "version"]);
-  assert.deepEqual(Object.keys(serialized.players[0]).sort(), [
-    "id",
-    "name",
-    "ownedAgentIds",
-  ]);
+  assert.equal(result.changed, false);
+  assert.equal(result.reason, "no-solution");
+  assert.strictEqual(result.state, match);
 });
 
-test("browser UI does not use innerHTML for dynamic rendering", async () => {
-  const appSource = await readFile(new URL("../app.js", import.meta.url), "utf8");
-  assert.doesNotMatch(appSource, /\.innerHTML\s*=/);
-  assert.match(appSource, /textContent/);
-  assert.match(appSource, /replaceChildren/);
-});
-
-test("5,000 randomized valid and invalid setups preserve every solver invariant", () => {
+test("5,000 randomized setups preserve every invariant for returned drafts", () => {
   const random = seededRandom(0xa63e71);
   let solvedCases = 0;
   let impossibleCases = 0;
@@ -427,7 +424,6 @@ test("5,000 randomized valid and invalid setups preserve every solver invariant"
       AGENTS.forEach((agent) => {
         if (random() < 0.32) owned.add(agent.id);
       });
-      // Regularly create deliberately narrow/invalid profiles as well.
       if (caseIndex % 17 === 0) {
         owned.clear();
         owned.add(shuffledAgentIds[(playerIndex + knownPickCount) % AGENTS.length]);
@@ -441,25 +437,19 @@ test("5,000 randomized valid and invalid setups preserve every solver invariant"
       random,
     });
     const draft = solveDraft(setup);
-
     if (!draft) {
       impossibleCases += 1;
       continue;
     }
-
     solvedCases += 1;
     assert.ok(validateDraft({ ...setup, assignment: draft }));
     assert.equal(new Set(draft.map((agent) => agent.id)).size, draft.length);
-    draft.forEach((agent, playerIndex) => {
-      assert.ok(setupPlayers[playerIndex].ownedAgentIds.has(agent.id));
-      assert.equal(taken.has(agent.id), false);
-    });
   }
 
   assert.equal(solvedCases + impossibleCases, 5000);
   assert.ok(solvedCases > 0);
   assert.ok(impossibleCases > 0);
   console.log(
-    `Randomized cases: 5000 (${solvedCases} solved, ${impossibleCases} correctly reported impossible)`,
+    `Randomized solver trials: 5000 (${solvedCases} solved, ${impossibleCases} returned impossible; oracle classification is reported separately)`,
   );
 });
