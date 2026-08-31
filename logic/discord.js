@@ -11,7 +11,8 @@ export function formatDiscordResult({
   draft,
   players,
   pinnedPlayerIds,
-  rerollsRemaining,
+  personalRerollsRemaining,
+  teamRedrawsRemaining,
   rerollBudget,
   takenAgentIds,
   agents,
@@ -21,10 +22,16 @@ export function formatDiscordResult({
     const pinned = pinnedPlayerIds.has(players[index].id) ? " [pinned]" : "";
     return `${escapeDiscordText(rawName)} → ${agent.name} (${agent.role})${pinned}`;
   });
-  const rerollsUsed = rerollBudget - rerollsRemaining;
+  const personalRerollsUsed = players.reduce(
+    (total, player) =>
+      total + rerollBudget - (personalRerollsRemaining.get(player.id) ?? rerollBudget),
+    0,
+  );
+  const teamRedrawsUsed = rerollBudget - teamRedrawsRemaining;
   const footer = [
     `match ${matchNumber}`,
-    `${rerollsUsed} ${rerollsUsed === 1 ? "reroll" : "rerolls"} used`,
+    `${personalRerollsUsed} personal ${personalRerollsUsed === 1 ? "reroll" : "rerolls"} used`,
+    `${teamRedrawsUsed} team ${teamRedrawsUsed === 1 ? "redraw" : "redraws"} used`,
   ];
 
   if (takenAgentIds.size) {
