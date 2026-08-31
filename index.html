@@ -3,61 +3,65 @@
   <head>
     <meta charset="utf-8" />
     <meta name="viewport" content="width=device-width, initial-scale=1" />
-    <meta name="theme-color" content="#d7dcdf" />
-    <title>Agent Roulette — a role-aware Valorant agent randomiser</title>
+    <meta name="theme-color" content="#090b0e" />
+    <title>Agent Roulette — smart randomness for a real squad</title>
     <meta
       name="description"
-      content="Spin a role-aware Valorant draft for your stack. Respects agent unlocks, outside teammate picks, distinct agents, and a shared reroll budget."
+      content="Build a role-aware VALORANT squad draft around the agents your stack actually owns."
     />
     <meta property="og:type" content="website" />
     <meta property="og:url" content="https://ananyaabhay.github.io/agent-roulette/" />
     <meta property="og:title" content="Agent Roulette" />
     <meta
       property="og:description"
-      content="A lightweight role-aware Valorant agent randomiser for real stacks, saved ownership, outside picks, and limited rerolls."
+      content="Smart randomness for a real squad: saved players, owned agents, role-aware drafts, and limited rerolls."
     />
     <meta name="twitter:card" content="summary" />
     <meta name="twitter:title" content="Agent Roulette" />
     <meta
       name="twitter:description"
-      content="Build a valid role-aware Valorant draft around the agents your stack actually owns."
+      content="Lock in a valid role-aware VALORANT squad draft in seconds."
     />
     <link rel="icon" href="./favicon.svg" type="image/svg+xml" />
     <link rel="preconnect" href="https://fonts.googleapis.com" />
     <link rel="preconnect" href="https://fonts.gstatic.com" crossorigin />
     <link
-      href="https://fonts.googleapis.com/css2?family=Big+Shoulders+Display:wght@600;700;800&family=IBM+Plex+Mono:wght@400;500;600&family=IBM+Plex+Sans:wght@400;500;600&display=swap"
+      href="https://fonts.googleapis.com/css2?family=Big+Shoulders+Display:wght@600;700;800;900&family=IBM+Plex+Mono:wght@400;500;600&family=IBM+Plex+Sans:wght@400;500;600;700&display=swap"
       rel="stylesheet"
     />
-    <link rel="stylesheet" href="./styles.css?v=1.3.1-2" />
-    <script type="module" src="./app.js?v=1.3.1"></script>
+    <link rel="stylesheet" href="./styles.css?v=1.4.0" />
+    <script type="module" src="./app.js?v=1.4.0"></script>
   </head>
   <body>
-    <div class="wrap">
-      <header class="masthead">
-        <div class="slug" aria-label="Application details">
-          <span>Agent Roulette</span>
-          <span>v1.3.1</span>
-          <span>No account · profiles saved on this device</span>
+    <div class="app-shell">
+      <header class="topbar">
+        <a class="brand" href="./" aria-label="Agent Roulette home">
+          <span class="brand-mark" aria-hidden="true">AR</span>
+          <span class="brand-copy">
+            <strong>Agent Roulette</strong>
+            <small>Smart randomness / real squads</small>
+          </span>
+        </a>
+        <div class="build-stamp" aria-label="Application details">
+          <span>V1.4</span>
+          <span>Local profiles</span>
         </div>
-        <h1>Agent<br />roulette</h1>
-        <p class="lede">
-          A fast pre-game randomiser that works around what your stack owns,
-          what outside teammates have locked, and what roles the team still needs.
-        </p>
       </header>
 
-      <main class="board">
-        <section class="col col--left" aria-labelledby="stackTitle">
-          <div class="col-head">
-            <h2 id="stackTitle">Current stack</h2>
-            <span class="hint" id="stackHint"></span>
+      <main class="command-grid">
+        <section class="setup-panel" aria-labelledby="stackTitle">
+          <div class="section-heading">
+            <div>
+              <p class="eyebrow">Squad setup</p>
+              <h1 id="stackTitle">Who’s playing?</h1>
+            </div>
+            <span class="section-status" id="stackHint"></span>
           </div>
 
-          <div id="players"></div>
-          <div class="add-row">
+          <div class="squad-grid" id="players"></div>
+          <div class="player-actions">
             <button
-              class="ghost"
+              class="button button--primary"
               id="addPlayer"
               type="button"
               aria-expanded="false"
@@ -65,57 +69,69 @@
             >
               + Add player
             </button>
-            <button class="text-button" id="resetSaved" type="button">
-              Delete all saved profiles
+            <button class="text-button" id="managePlayers" type="button">
+              Manage saved players
             </button>
           </div>
-          <section
-            class="player-library"
-            id="playerLibrary"
-            aria-label="Saved player library"
-            hidden
-          ></section>
 
-          <section class="outside" id="lobbySection" aria-labelledby="lobbyTitle">
-            <div class="outside-head">
+          <section class="team-context" aria-label="Five-player team context">
+            <div class="context-heading">
               <div>
-                <p class="eyebrow">Optional · improves Role Balanced</p>
-                <h3 id="lobbyTitle">Other teammate picks</h3>
+                <p class="eyebrow">Full team context</p>
+                <h2>Lobby seats</h2>
               </div>
-              <strong id="outsideCount"></strong>
+              <span id="outsideCount"></span>
             </div>
-            <p class="outside-note" id="outsideNote"></p>
             <div class="team-seats" id="teamSeats" aria-label="Five team seats"></div>
-            <div id="lobbyCard" class="player"></div>
+
+            <section class="outside" id="lobbySection" aria-labelledby="lobbyTitle">
+              <div class="outside-copy">
+                <h3 id="lobbyTitle">Other teammate picks</h3>
+                <p id="outsideNote"></p>
+              </div>
+              <div id="lobbyCard" class="player"></div>
+            </section>
           </section>
 
-          <section class="team-needs" aria-labelledby="teamNeedsTitle">
-            <div class="section-kicker">
-              <h3 id="teamNeedsTitle">Team needs</h3>
-              <span>Live solver input</span>
+          <details class="team-needs">
+            <summary>
+              <span>
+                <span class="eyebrow">Role Balanced intel</span>
+                <strong id="teamNeedsTitle">Team needs</strong>
+              </span>
+              <span class="needs-signal" id="teamNeedsSignal">Add players</span>
+            </summary>
+            <div class="team-needs-body">
+              <p id="teamNeedsIntro"></p>
+              <div id="teamNeeds" aria-live="polite"></div>
             </div>
-            <p id="teamNeedsIntro">
-              What the current role targets need from your stack.
-            </p>
-            <div id="teamNeeds" aria-live="polite"></div>
-          </section>
+          </details>
         </section>
 
-        <section class="col col--right" aria-labelledby="rouletteTitle">
-          <div class="col-head">
-            <h2 id="rouletteTitle">Roulette</h2>
-            <span class="hint" id="spinHint">Match 1 · ready</span>
+        <section class="draft-panel" aria-labelledby="rouletteTitle">
+          <div class="draft-heading">
+            <div>
+              <p class="eyebrow">Tactical draft room</p>
+              <h2 id="rouletteTitle">Squad reveal</h2>
+            </div>
+            <div class="match-index">
+              <span>Match</span>
+              <strong id="matchNumber">01</strong>
+              <small id="spinHint">Ready</small>
+            </div>
           </div>
 
-          <div class="mode-rail" role="group" aria-label="Draft mode">
-            <button id="modeBalanced" type="button" aria-pressed="true">
-              Role Balanced
-            </button>
-            <button id="modeChaos" type="button" aria-pressed="false">
-              Full Chaos
-            </button>
+          <div class="mode-row">
+            <div class="mode-rail" role="group" aria-label="Draft mode">
+              <button id="modeBalanced" type="button" aria-pressed="true">
+                Role Balanced
+              </button>
+              <button id="modeChaos" type="button" aria-pressed="false">
+                Full Chaos
+              </button>
+            </div>
+            <p class="mode-description" id="modeDescription"></p>
           </div>
-          <p class="mode-description" id="modeDescription"></p>
 
           <div class="status" id="status" role="status" aria-live="polite">
             <span class="status-dot" aria-hidden="true"></span>
@@ -127,34 +143,31 @@
 
           <div class="results" id="results"></div>
 
-          <section class="match-panel" aria-label="Match and reroll status">
-            <div>
-              <span class="match-label">Match</span>
-              <strong id="matchNumber">01</strong>
-            </div>
-            <div class="reroll-status">
-              <span class="match-label">Rerolls</span>
-              <strong id="rerollCount">3 / 3 remaining</strong>
-              <span class="reroll-dots" id="rerollDots" aria-hidden="true"></span>
-            </div>
-          </section>
-
-          <div class="actions" aria-label="Draft actions">
-            <button class="roll" id="roll" type="button">Spin</button>
-            <button class="ghost" id="redraw" type="button" disabled>
-              Redraw unpinned
+          <div class="draft-actions" aria-label="Draft actions">
+            <button class="lock-button" id="roll" type="button">
+              <span>Lock us in</span>
+              <small>Randomise squad</small>
             </button>
-            <button class="ghost" id="newMatch" type="button" disabled>
+            <div class="reroll-control">
+              <div class="reroll-readout">
+                <span class="match-label">Shared rerolls</span>
+                <span class="reroll-dots" id="rerollDots" aria-hidden="true"></span>
+                <strong class="sr-only" id="rerollCount">3 of 3 rerolls remaining</strong>
+              </div>
+              <button class="button button--secondary" id="redraw" type="button" disabled>
+                Redraw unpinned
+              </button>
+            </div>
+            <button class="text-button new-match" id="newMatch" type="button" disabled>
               New Match
             </button>
           </div>
-          <p class="action-help">
-            Spin creates one draft. Any reroll spends one shared token. New Match
-            clears the draft and refills all three.
-          </p>
 
-          <div class="share-actions" aria-label="Share result">
-            <button class="ghost" id="copy" type="button">Copy result</button>
+          <div class="share-actions" aria-label="Share result" hidden>
+            <span class="share-label">Send the lineup</span>
+            <button class="button button--secondary" id="copy" type="button">
+              Copy result
+            </button>
             <button class="discord-primary" id="copyOpen" type="button">
               Copy &amp; open Discord
             </button>
@@ -165,9 +178,6 @@
               rel="noopener noreferrer"
               aria-label="Open Discord in a new tab"
             >
-              <svg viewBox="0 0 24 24" aria-hidden="true" focusable="false">
-                <path d="M19.5 5.3A16.7 16.7 0 0 0 15.4 4l-.5 1.1a15 15 0 0 0-5.8 0L8.6 4a16.9 16.9 0 0 0-4.1 1.3C1.9 9.2 1.2 13 1.6 16.7a16.5 16.5 0 0 0 5 2.5l1.2-1.7c-.7-.3-1.3-.6-1.9-1l.5-.4c3.7 1.7 7.6 1.7 11.2 0l.6.4c-.6.4-1.3.7-1.9 1l1.2 1.7a16.4 16.4 0 0 0 5-2.5c.5-4.3-.8-8.1-3-11.4ZM8.9 14.6c-1.1 0-2-1-2-2.2s.9-2.2 2-2.2 2 1 2 2.2-.9 2.2-2 2.2Zm6.2 0c-1.1 0-2-1-2-2.2s.9-2.2 2-2.2 2 1 2 2.2-.9 2.2-2 2.2Z" />
-              </svg>
               Open Discord
             </a>
           </div>
@@ -178,20 +188,21 @@
 
       <footer>
         <p>
-          Role Balanced uses supplied ownership and known teammate picks to cover
-          sensible role targets. It does not use map, patch meta, win rate,
-          professional pick rate, synergy data, or player skill.
+          Role Balanced uses owned agents and known teammate picks—not maps, meta,
+          win rate, synergy data, or player skill.
         </p>
         <p>
-          Default agents stay enabled. Saved profiles stay in this browser on this
-          device. The active Match is kept only for this browser tab so a refresh
-          does not erase the draft, picks, pins, or rerolls.
+          Profiles stay on this device. Your active Match stays in this browser tab
+          and survives refresh.
         </p>
         <p>
-          Fan project. Not affiliated with or endorsed by Riot Games. VALORANT and
-          agent names are trademarks of Riot Games, Inc.
+          Agent Roulette isn’t endorsed by Riot Games and doesn’t reflect the views
+          of Riot Games. VALORANT and all associated properties are trademarks or
+          registered trademarks of Riot Games, Inc.
         </p>
       </footer>
     </div>
+
+    <dialog class="player-library" id="playerLibrary" aria-label="Saved players"></dialog>
   </body>
 </html>
