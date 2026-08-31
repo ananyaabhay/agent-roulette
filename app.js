@@ -1,4 +1,4 @@
-// Agent Roulette V1.3.1 browser state and accessible rendering.
+// Agent Roulette V1.4 experience layer over the stable V1.3.1 logic.
 import {
   AGENT_BY_ID,
   AGENTS,
@@ -57,13 +57,11 @@ function makePlayerId() {
   return `player-${Date.now()}-${fallbackId}`;
 }
 
-function createSavedPlayer(name, startWithAll) {
+function createSavedPlayer(name, ownedAgentIds = STARTER_AGENT_IDS) {
   return {
     id: makePlayerId(),
     name: sanitizeProfileName(name.trim()),
-    ownedAgentIds: new Set(
-      startWithAll ? AGENTS.map((agent) => agent.id) : STARTER_AGENT_IDS,
-    ),
+    ownedAgentIds: new Set([...STARTER_AGENT_IDS, ...ownedAgentIds]),
     open: false,
   };
 }
@@ -115,6 +113,11 @@ let matchState = createMatchState(
 );
 let lobbyOpen = false;
 let libraryOpen = savedPlayers.length === 0;
+let libraryView = savedPlayers.length === 0 ? "editor" : "choose";
+let editorReturnView = "choose";
+let editingPlayerId = null;
+let editorName = "";
+let editorAgentIds = new Set(STARTER_AGENT_IDS);
 let feasible = false;
 
 function syncPlayers() {
@@ -187,6 +190,18 @@ function actionButton(text, className = "icon-btn") {
   const button = element("button", className, text);
   button.type = "button";
   return button;
+}
+
+function agentInitials(agent) {
+  if (agent.id === "kayo") return "K/O";
+  const parts = agent.name.replace(/[^A-Za-z0-9 ]/g, "").split(/\s+/).filter(Boolean);
+  return parts.length > 1
+    ? parts.map((part) => part[0]).join("").slice(0, 3).toUpperCase()
+    : agent.name.slice(0, 2).toUpperCase();
+}
+
+function setsEqual(left, right) {
+  return left.size === right.size && [...left].every((value) => right.has(value));
 }
 
 function playerLabel(player, index = players.indexOf(player)) {
@@ -312,7 +327,7 @@ function createChipGrid({ isOn, isFixed, isGone, isDisabled, onToggle }) {
         chip.title = "All outside teammate seats are already accounted for";
       }
       if (!disabled && onToggle) {
-        chip.addEventListener("click", () => onToggle(agent));
+        chip.addEventListener("click", () => onToggle(agent, chip));
       }
       chips.append(chip);
     });
@@ -323,314 +338,451 @@ function createChipGrid({ isOn, isFixed, isGone, isDisabled, onToggle }) {
   return fragment;
 }
 
-function updateOwnership(player, nextAgentIds, description) {
-  const previous = player.ownedAgentIds;
-  applyReconcilableChange({
-    apply: () => {
-      player.ownedAgentIds = new Set(nextAgentIds);
-      STARTER_AGENT_IDS.forEach((agentId) => player.ownedAgentIds.add(agentId));
-    },
-    rollback: () => {
-      player.ownedAgentIds = previous;
-    },
-    persistProfiles: true,
-    description,
-  });
+function openPlayerLibrary(view = "choose") {
+  libraryOpen = true;
+  libraryView = savedPlayers.length === 0 && view === "choose" ? "editor" : view;
+  renderPlayers();
+  renderLibrary();
+}
+
+function closePlayerLibrary(focusSelector = "#addPlayer") {
+  libraryOpen = false;
+  renderPlayers();
+  renderLibrary();
+  $(focusSelector)?.focus();
+}
+
+function openPlayerEditor(profile = null, returnView = "choose") {
+  editingPlayerId = profile?.id || null;
+  editorName = profile?.name || "";
+  editorAgentIds = new Set(profile?.ownedAgentIds || STARTER_AGENT_IDS);
+  STARTER_AGENT_IDS.forEach((agentId) => editorAgentIds.add(agentId));
+  editorReturnView = returnView;
+  openPlayerLibrary("editor");
 }
 
 function renderPlayers() {
   playersElement.replaceChildren();
 
   if (players.length === 0) {
-    const empty = element("div", "stack-empty");
-    empty.append(element("strong", "", "No one is in today’s stack yet."));
-    empty.append(
-      document.createTextNode(
-        "Open Add player to choose a saved profile or create your first one.",
-      ),
-    );
+    const empty = element("div", "squad-empty");
+    empty.append(element("span", "empty-mark", "+"));
+    const copy = element("span");
+    copy.append(element("strong", "", "Build today’s squad"));
+    copy.append(element("small", "", "Choose a saved player or make a new one."));
+    empty.append(copy);
     playersElement.append(empty);
   }
 
   players.forEach((player, index) => {
-    const card = element("article", `player${player.open ? " open" : ""}`);
-    const poolId = `agent-pool-${player.id}`;
-    const bar = element("div", "player-bar");
-    bar.append(element("span", "slot", String(index + 1).padStart(2, "0")));
-
-    const nameInput = element("input", "name-input");
-    nameInput.type = "text";
-    nameInput.maxLength = MAX_NAME_LENGTH;
-    nameInput.placeholder = `Player ${index + 1}`;
-    nameInput.setAttribute("aria-label", `${playerLabel(player, index)} display name`);
-    nameInput.value = player.name;
-    nameInput.addEventListener("input", (event) => {
-      player.name = sanitizeProfileName(event.target.value);
-      savePreferences();
-      if (matchState.draft) renderResults(matchState.draft, { animate: false });
-    });
-    bar.append(nameInput);
-
-    bar.append(
+    const card = element("article", "squad-player");
+    const identity = element("div", "squad-identity");
+    const monogram = element(
+      "span",
+      "player-monogram",
+      (playerLabel(player, index)[0] || String(index + 1)).toUpperCase(),
+    );
+    monogram.setAttribute("aria-hidden", "true");
+    const copy = element("span", "squad-copy");
+    copy.append(element("small", "", `Player ${String(index + 1).padStart(2, "0")}`));
+    copy.append(element("strong", "", playerLabel(player, index)));
+    copy.append(
       element(
         "span",
-        "count",
-        `${getAvailableAgents(player, takenAgentIds, AGENTS).length} avail.`,
+        "",
+        `${player.ownedAgentIds.size} owned · ${getAvailableAgents(player, takenAgentIds, AGENTS).length} available`,
       ),
     );
+    identity.append(monogram, copy);
+    card.append(identity);
 
-    const toggleButton = actionButton(player.open ? "Done" : "Agents");
-    toggleButton.setAttribute("aria-expanded", player.open ? "true" : "false");
-    toggleButton.setAttribute("aria-controls", poolId);
-    toggleButton.addEventListener("click", () => {
-      player.open = !player.open;
-      renderPlayers();
-    });
-    bar.append(toggleButton);
-
-    const removeButton = actionButton("Remove");
-    removeButton.setAttribute(
+    const controls = element("div", "squad-controls");
+    const edit = actionButton("Edit agents", "icon-btn");
+    edit.addEventListener("click", () => openPlayerEditor(player, "choose"));
+    const remove = actionButton("Remove", "icon-btn icon-btn--quiet");
+    remove.setAttribute(
       "aria-label",
-      `Remove ${playerLabel(player, index)} from the current stack`,
+      `Remove ${playerLabel(player, index)} from today’s squad`,
     );
-    removeButton.addEventListener("click", () => {
+    remove.addEventListener("click", () => {
       changeStack(
         () => currentStackIds.splice(index, 1),
         `Removing ${playerLabel(player, index)} from the current stack`,
       );
     });
-    bar.append(removeButton);
-    card.append(bar);
-
-    const pool = element("div", "pool");
-    pool.id = poolId;
-    const tools = element("div", "pool-tools");
-    const allButton = actionButton(`All ${AGENTS.length}`);
-    allButton.addEventListener("click", () => {
-      updateOwnership(
-        player,
-        AGENTS.map((agent) => agent.id),
-        `Changing ${playerLabel(player, index)} to all agents`,
-      );
-    });
-    const startersButton = actionButton(
-      `Default ${STARTER_AGENT_IDS.length} only`,
-    );
-    startersButton.addEventListener("click", () => {
-      updateOwnership(
-        player,
-        STARTER_AGENT_IDS,
-        `Changing ${playerLabel(player, index)} to default agents only`,
-      );
-    });
-    tools.append(allButton, startersButton);
-    pool.append(tools);
-    pool.append(
-      element(
-        "p",
-        "pool-note",
-        "Default agents stay on. Outside picks are temporarily unavailable, but they remain saved as owned.",
-      ),
-    );
-    pool.append(
-      createChipGrid({
-        isOn: (agent) => player.ownedAgentIds.has(agent.id),
-        isFixed: (agent) => agent.starter,
-        isGone: (agent) => takenAgentIds.has(agent.id),
-        isDisabled: () => false,
-        onToggle: (agent) => {
-          const next = new Set(player.ownedAgentIds);
-          next.has(agent.id) ? next.delete(agent.id) : next.add(agent.id);
-          updateOwnership(
-            player,
-            next,
-            `Changing ${playerLabel(player, index)}’s ownership`,
-          );
-        },
-      }),
-    );
-    card.append(pool);
+    controls.append(edit, remove);
+    card.append(controls);
     playersElement.append(card);
   });
 
-  $("#stackHint").textContent = `${players.length}-stack · ${players.length} of ${MAX_TEAM_SIZE} seats`;
+  $("#stackHint").textContent = `${players.length} / ${MAX_TEAM_SIZE} locked`;
   const addPlayerButton = $("#addPlayer");
   addPlayerButton.setAttribute("aria-expanded", libraryOpen ? "true" : "false");
-  addPlayerButton.textContent = libraryOpen ? "Close player library" : "+ Add player";
+  addPlayerButton.disabled = availableStackSeats() <= 0;
+  addPlayerButton.title = addPlayerButton.disabled
+    ? "All five lobby seats are already accounted for"
+    : "Choose who is playing";
 }
 
-function renderLibrary() {
-  const panel = $("#playerLibrary");
-  panel.hidden = !libraryOpen;
-  panel.replaceChildren();
-  if (!libraryOpen) return;
+function deleteSavedProfile(profile, profileIndex) {
+  const inStack = currentStackIds.includes(profile.id);
+  const activeWarning = inStack && matchState.draft
+    ? " This will also end the active Match because that player is in the current stack."
+    : "";
+  if (
+    !window.confirm(
+      `Permanently delete “${profile.name || `Saved player ${profileIndex + 1}`}”? Their ownership settings cannot be recovered.${activeWarning}`,
+    )
+  ) {
+    return;
+  }
 
-  const header = element("div", "library-head");
-  const heading = element("div");
-  heading.append(element("p", "eyebrow", "Saved on this device"));
-  heading.append(element("h3", "", "Player library"));
-  const close = actionButton("Close");
-  close.addEventListener("click", () => {
-    libraryOpen = false;
-    renderPlayers();
-    renderLibrary();
-    $("#addPlayer").focus();
-  });
-  header.append(heading, close);
-  panel.append(header);
-  panel.append(
+  savedPlayers.splice(profileIndex, 1);
+  currentStackIds = currentStackIds.filter((playerId) => playerId !== profile.id);
+  syncPlayers();
+  if (inStack && matchState.draft) matchState = startNewMatch(matchState);
+  savePreferences();
+  saveSession();
+  libraryOpen = true;
+  libraryView = savedPlayers.length ? "manage" : "editor";
+  if (!savedPlayers.length) {
+    editingPlayerId = null;
+    editorName = "";
+    editorAgentIds = new Set(STARTER_AGENT_IDS);
+  }
+  renderAll();
+  showNote(
+    "Saved player deleted.",
+    `${profile.name || "The player"} was removed from this device${inStack ? " and today’s squad" : ""}.`,
+    true,
+  );
+}
+
+function resetAllProfiles() {
+  if (
+    !window.confirm(
+      "Permanently delete every saved player and ownership setting on this device? This cannot be undone.",
+    )
+  ) {
+    return;
+  }
+  try {
+    localStorage.removeItem(PREFERENCES_KEY);
+    localStorage.removeItem(LEGACY_PREFERENCES_KEY);
+    sessionStorage.removeItem(SESSION_KEY);
+  } catch (error) {
+    console.warn("Saved data could not be removed.", error);
+  }
+  savedPlayers = [];
+  currentStackIds = [];
+  players = [];
+  preferredMode = "balanced";
+  mode = "balanced";
+  takenAgentIds = new Set();
+  lobbyOpen = false;
+  libraryOpen = true;
+  libraryView = "editor";
+  editingPlayerId = null;
+  editorName = "";
+  editorAgentIds = new Set(STARTER_AGENT_IDS);
+  matchState = createMatchState();
+  savePreferences();
+  saveSession();
+  renderAll();
+  showNote(
+    "Saved players cleared.",
+    "Create a new player to start today’s squad.",
+    true,
+  );
+}
+
+function renderPlayerEditor(panel) {
+  const profile = editingPlayerId
+    ? savedPlayers.find((candidate) => candidate.id === editingPlayerId)
+    : null;
+  if (editingPlayerId && !profile) {
+    editingPlayerId = null;
+    editorName = "";
+    editorAgentIds = new Set(STARTER_AGENT_IDS);
+  }
+
+  const form = element("form", "player-editor");
+  form.noValidate = true;
+
+  const editorHeading = element("div", "editor-heading");
+  editorHeading.append(
+    element("p", "eyebrow", profile ? "Saved player" : "New player"),
+    element("h3", "", profile ? `Edit ${profile.name || "player"}` : "Create player"),
     element(
       "p",
-      "library-intro",
-      "Removing someone from today’s stack keeps their saved name and ownership here.",
+      "",
+      "Who are you, and which agents can the roulette assign you?",
     ),
   );
+  form.append(editorHeading);
 
-  const list = element("div", "library-list");
-  if (savedPlayers.length === 0) {
-    list.append(element("p", "library-empty", "No saved profiles yet."));
-  }
-  savedPlayers.forEach((profile, profileIndex) => {
-    const inStack = currentStackIds.includes(profile.id);
-    const row = element("div", "library-row");
-    const identity = element("span", "library-identity");
-    identity.append(
-      element("strong", "", profile.name.trim() || `Saved player ${profileIndex + 1}`),
-    );
-    identity.append(
-      element("span", "", `${profile.ownedAgentIds.size} owned agents`),
-    );
-    row.append(identity);
-
-    const add = actionButton(inStack ? "In stack" : "Add", "icon-btn library-add");
-    add.disabled = inStack || availableStackSeats() <= 0;
-    if (!inStack && availableStackSeats() <= 0) {
-      add.title = "All five team seats are already accounted for";
-    }
-    add.addEventListener("click", () => {
-      if (add.disabled) return;
-      if (
-        changeStack(
-          () => currentStackIds.push(profile.id),
-          `Adding ${profile.name || "this saved player"} to the current stack`,
-        )
-      ) {
-        libraryOpen = true;
-        renderPlayers();
-        renderLibrary();
-      }
-    });
-    row.append(add);
-
-    const remove = actionButton("Delete profile", "text-button danger");
-    remove.setAttribute(
-      "aria-label",
-      `Permanently delete the saved profile for ${profile.name || `player ${profileIndex + 1}`}`,
-    );
-    remove.addEventListener("click", () => {
-      const activeWarning = inStack && matchState.draft
-        ? " This will also end the active Match because that player is in the current stack."
-        : "";
-      if (
-        !window.confirm(
-          `Permanently delete the saved profile “${profile.name || `Saved player ${profileIndex + 1}`}”? Their ownership settings cannot be recovered.${activeWarning}`,
-        )
-      ) {
-        return;
-      }
-      savedPlayers.splice(profileIndex, 1);
-      currentStackIds = currentStackIds.filter((playerId) => playerId !== profile.id);
-      syncPlayers();
-      if (inStack && matchState.draft) matchState = startNewMatch(matchState);
-      savePreferences();
-      saveSession();
-      renderAll();
-      libraryOpen = true;
-      renderPlayers();
-      renderLibrary();
-      showNote(
-        "Saved profile deleted.",
-        `${profile.name || "The player"} was removed from this device${inStack ? " and from the current stack" : ""}.`,
-        true,
-      );
-    });
-    list.append(row);
-  });
-  panel.append(list);
-
-  const form = element("form", "new-profile");
-  form.noValidate = true;
-  form.append(element("h4", "", "+ New player"));
-  const nameLabel = element("label", "new-profile-name");
-  nameLabel.append(element("span", "", "Display name"));
+  const nameLabel = element("label", "editor-name");
+  nameLabel.append(element("span", "field-label", "Name"));
   const nameInput = element("input");
   nameInput.type = "text";
   nameInput.name = "player-name";
   nameInput.maxLength = MAX_NAME_LENGTH;
   nameInput.autocomplete = "off";
   nameInput.placeholder = "e.g. Ananya";
+  nameInput.value = editorName;
+  nameInput.addEventListener("input", (event) => {
+    editorName = sanitizeProfileName(event.target.value);
+  });
   nameLabel.append(nameInput);
   form.append(nameLabel);
 
-  const choices = element("fieldset", "start-options");
-  choices.append(element("legend", "", "Start with"));
-  [
-    ["default", "Default agents only", true],
-    ["all", "All agents", false],
-  ].forEach(([value, label, checked]) => {
-    const option = element("label");
-    const radio = element("input");
-    radio.type = "radio";
-    radio.name = "starting-pool";
-    radio.value = value;
-    radio.checked = checked;
-    option.append(radio, document.createTextNode(label));
-    choices.append(option);
+  const selectorHead = element("div", "selector-head");
+  const selectorTitle = element("div");
+  selectorTitle.append(element("span", "field-label", "Agents you own"));
+  selectorTitle.append(
+    element("small", "agent-count", `${editorAgentIds.size} selected`),
+  );
+  const tools = element("div", "pool-tools");
+  const selectAll = actionButton("Select all", "icon-btn");
+  selectAll.addEventListener("click", () => {
+    editorAgentIds = new Set(AGENTS.map((agent) => agent.id));
+    renderLibrary();
   });
-  form.append(choices);
+  const resetDefaults = actionButton("Reset to defaults", "icon-btn icon-btn--quiet");
+  resetDefaults.addEventListener("click", () => {
+    editorAgentIds = new Set(STARTER_AGENT_IDS);
+    renderLibrary();
+  });
+  tools.append(selectAll, resetDefaults);
+  selectorHead.append(selectorTitle, tools);
+  form.append(selectorHead);
   form.append(
     element(
       "p",
       "pool-note",
-      `The ${STARTER_AGENT_IDS.length} default agents always stay enabled. You can customise the profile after adding it.`,
+      `The ${STARTER_AGENT_IDS.length} guaranteed agents are already selected and stay locked.`,
     ),
   );
-  const create = actionButton("Create saved player", "ghost");
-  create.type = "submit";
-  form.append(create);
+
+  const agentSelector = element("div", "agent-selector");
+  agentSelector.append(
+    createChipGrid({
+      isOn: (agent) => editorAgentIds.has(agent.id),
+      isFixed: (agent) => agent.starter,
+      isGone: () => false,
+      isDisabled: () => false,
+      onToggle: (agent, chip) => {
+        editorAgentIds.has(agent.id)
+          ? editorAgentIds.delete(agent.id)
+          : editorAgentIds.add(agent.id);
+        chip.setAttribute(
+          "aria-pressed",
+          editorAgentIds.has(agent.id) ? "true" : "false",
+        );
+        selectorTitle.querySelector(".agent-count").textContent = `${editorAgentIds.size} selected`;
+      },
+    }),
+  );
+  form.append(agentSelector);
+
+  const actions = element("div", "editor-actions");
+  const cancel = actionButton("Cancel", "button button--secondary");
+  cancel.addEventListener("click", () => {
+    if (!savedPlayers.length && !profile) {
+      closePlayerLibrary();
+      return;
+    }
+    libraryView = editorReturnView;
+    renderLibrary();
+  });
+  const save = actionButton(
+    profile ? "Save changes" : "Save & add to stack",
+    "button button--primary",
+  );
+  save.type = "submit";
+  actions.append(cancel, save);
+  form.append(actions);
+
   form.addEventListener("submit", (event) => {
     event.preventDefault();
-    const name = sanitizeProfileName(nameInput.value).trim();
+    const name = sanitizeProfileName(editorName).trim();
     if (!name) {
-      showNote("Give this profile a name.", "Names can repeat; profiles use separate internal IDs.");
+      nameInput.setAttribute("aria-invalid", "true");
       nameInput.focus();
       return;
     }
-    const startWithAll = form.elements["starting-pool"].value === "all";
-    const profile = createSavedPlayer(name, startWithAll);
-    savedPlayers.push(profile);
-    savePreferences();
-    let addedToStack = false;
-    if (availableStackSeats() > 0) {
-      addedToStack = changeStack(
-        () => currentStackIds.push(profile.id),
+
+    if (!profile) {
+      const newProfile = createSavedPlayer(name, editorAgentIds);
+      const added = changeStack(
+        () => {
+          savedPlayers.push(newProfile);
+          currentStackIds.push(newProfile.id);
+        },
         `Adding ${name} to the current stack`,
       );
-    } else {
+      if (!added) return;
+      savePreferences();
+      libraryOpen = false;
+      libraryView = "choose";
       renderAll();
+      showNote(
+        `${name} joined the squad.`,
+        `${newProfile.ownedAgentIds.size} owned agents saved on this device.`,
+        true,
+      );
+      return;
     }
-    libraryOpen = true;
-    renderPlayers();
-    renderLibrary();
+
+    const previousName = profile.name;
+    const previousAgents = profile.ownedAgentIds;
+    const ownershipChanged = !setsEqual(previousAgents, editorAgentIds);
+    const applied = applyReconcilableChange({
+      apply: () => {
+        profile.name = name;
+        profile.ownedAgentIds = new Set(editorAgentIds);
+        STARTER_AGENT_IDS.forEach((agentId) => profile.ownedAgentIds.add(agentId));
+      },
+      rollback: () => {
+        profile.name = previousName;
+        profile.ownedAgentIds = previousAgents;
+      },
+      persistProfiles: true,
+      description: ownershipChanged
+        ? `Updating ${name}’s owned agents`
+        : `Renaming ${previousName || "this player"}`,
+    });
+    if (!applied) return;
+    libraryOpen = false;
+    libraryView = "choose";
+    renderAll();
     showNote(
-      `${name} saved${addedToStack ? " and added" : ""}.`,
-      startWithAll
-        ? "All agents are selected. Open Agents to customise ownership."
-        : "Only default agents are selected. Open Agents to add unlocks.",
+      `${name} updated.`,
+      `${profile.ownedAgentIds.size} owned agents saved.`,
       true,
     );
   });
+
   panel.append(form);
+  queueMicrotask(() => nameInput.focus());
+}
+
+function renderLibrary() {
+  const panel = $("#playerLibrary");
+  if (!libraryOpen) {
+    if (panel.open) panel.close();
+    panel.replaceChildren();
+    return;
+  }
+
+  panel.replaceChildren();
+  const header = element("div", "library-head");
+  const heading = element("div");
+  heading.append(element("p", "eyebrow", "Saved on this device"));
+  heading.append(
+    element(
+      "h2",
+      "",
+      libraryView === "manage"
+        ? "Manage players"
+        : libraryView === "editor"
+          ? "Player setup"
+          : "Who’s joining?",
+    ),
+  );
+  const close = actionButton("Close", "dialog-close");
+  close.setAttribute("aria-label", "Close saved players");
+  close.addEventListener("click", () => closePlayerLibrary());
+  header.append(heading, close);
+  panel.append(header);
+
+  if (libraryView === "editor") {
+    renderPlayerEditor(panel);
+  } else {
+    panel.append(
+      element(
+        "p",
+        "library-intro",
+        libraryView === "manage"
+          ? "Edit ownership or permanently remove profiles from this device."
+          : "One tap adds a saved player to today’s squad.",
+      ),
+    );
+
+    const list = element("div", "library-list");
+    savedPlayers.forEach((profile, profileIndex) => {
+      const inStack = currentStackIds.includes(profile.id);
+      const card = element("article", "library-card");
+      const monogram = element(
+        "span",
+        "library-monogram",
+        (profile.name.trim()[0] || String(profileIndex + 1)).toUpperCase(),
+      );
+      monogram.setAttribute("aria-hidden", "true");
+      const identity = element("span", "library-identity");
+      identity.append(
+        element("strong", "", profile.name.trim() || `Saved player ${profileIndex + 1}`),
+        element("span", "", `${profile.ownedAgentIds.size} agents`),
+      );
+      card.append(monogram, identity);
+
+      if (libraryView === "manage") {
+        const controls = element("span", "library-controls");
+        const edit = actionButton("Edit", "icon-btn");
+        edit.addEventListener("click", () => openPlayerEditor(profile, "manage"));
+        const remove = actionButton("Delete", "text-button danger");
+        remove.setAttribute(
+          "aria-label",
+          `Permanently delete ${profile.name || `saved player ${profileIndex + 1}`}`,
+        );
+        remove.addEventListener("click", () => deleteSavedProfile(profile, profileIndex));
+        controls.append(edit, remove);
+        card.append(controls);
+      } else {
+        const add = actionButton(inStack ? "Playing" : "Add", "library-add");
+        add.disabled = inStack || availableStackSeats() <= 0;
+        if (!inStack && availableStackSeats() <= 0) {
+          add.title = "All five lobby seats are already accounted for";
+        }
+        add.addEventListener("click", () => {
+          if (add.disabled) return;
+          const added = changeStack(
+            () => currentStackIds.push(profile.id),
+            `Adding ${profile.name || "this saved player"} to the current stack`,
+          );
+          if (added) closePlayerLibrary();
+        });
+        card.append(add);
+      }
+      list.append(card);
+    });
+    panel.append(list);
+
+    const footer = element("div", "library-footer");
+    if (libraryView === "manage") {
+      const back = actionButton("Back to add players", "button button--secondary");
+      back.addEventListener("click", () => {
+        libraryView = "choose";
+        renderLibrary();
+      });
+      const clear = actionButton("Delete all saved players", "text-button danger");
+      clear.addEventListener("click", resetAllProfiles);
+      footer.append(back, clear);
+    } else {
+      const create = actionButton("+ New player", "button button--primary");
+      create.disabled = availableStackSeats() <= 0;
+      create.addEventListener("click", () => openPlayerEditor(null, "choose"));
+      const manage = actionButton("Manage players", "text-button");
+      manage.addEventListener("click", () => {
+        libraryView = "manage";
+        renderLibrary();
+      });
+      footer.append(create, manage);
+    }
+    panel.append(footer);
+  }
+
+  if (!panel.open) panel.showModal();
 }
 
 function renderTeamSeats() {
@@ -639,7 +791,7 @@ function renderTeamSeats() {
   players.forEach((player, index) => {
     const seat = element("span", "team-seat stack-seat");
     seat.append(element("b", "", playerLabel(player, index)));
-    seat.append(element("small", "", "Your stack"));
+    seat.append(element("small", "", "Your squad"));
     seats.append(seat);
   });
   [...takenAgentIds].forEach((agentId) => {
@@ -731,11 +883,13 @@ function renderLobby() {
 
 function renderTeamNeeds() {
   const teamNeedsElement = $("#teamNeeds");
+  const signal = $("#teamNeedsSignal");
   teamNeedsElement.replaceChildren();
 
   if (players.length === 0) {
     $("#teamNeedsIntro").textContent =
       "Add someone to today’s stack to calculate role targets.";
+    signal.textContent = "Add players";
     return;
   }
 
@@ -743,6 +897,7 @@ function renderTeamNeeds() {
   if (mode === "chaos") {
     $("#teamNeedsIntro").textContent =
       "Full Chaos disables role targets. Ownership, outside picks, and distinct agents still apply.";
+    signal.textContent = "Targets off";
     teamNeedsElement.append(
       element("div", "needs-summary chaos", "Role targets are disabled for this Match."),
     );
@@ -756,6 +911,9 @@ function renderTeamNeeds() {
   const required = needs.filter((need) =>
     ["needed", "impossible"].includes(need.state),
   );
+  signal.textContent = required.length
+    ? required.map((need) => need.role).join(" + ")
+    : "Covered";
   const covered = needs
     .flatMap((need) => need.coveringLobbyAgents.map((agent) => `${agent.name} · ${need.role}`));
   summary.append(
@@ -822,8 +980,8 @@ function renderMode() {
   );
   $("#modeDescription").textContent =
     mode === "balanced"
-      ? "Role Balanced maintains sensible role coverage from the information you supply. It is not an optimal or map-meta composition."
-      : "Full Chaos ignores role targets while still respecting ownership, outside picks, and distinct agents.";
+      ? "Covers sensible role targets from the squad information you supply."
+      : "Ignores role targets; ownership and distinct-agent rules still apply.";
 }
 
 function checkFeasibility() {
@@ -832,19 +990,17 @@ function checkFeasibility() {
   status.classList.toggle("bad", !feasible);
 
   if (players.length === 0) {
-    $("#statusTitle").textContent = "Add at least one player.";
-    $("#statusBody").textContent =
-      "Choose a saved profile or create a new one before spinning.";
+    $("#statusTitle").textContent = "Squad waiting.";
+    $("#statusBody").textContent = "Add at least one player to begin.";
   } else if (feasible && matchState.draft) {
-    $("#statusTitle").textContent = "Match active.";
-    $("#statusBody").textContent =
-      "Use the shared rerolls to adjust this draft, or choose New Match to start over.";
+    $("#statusTitle").textContent = "Squad locked.";
+    $("#statusBody").textContent = "Pin a favourite or spend a shared reroll.";
   } else if (feasible) {
-    $("#statusTitle").textContent = "Ready to spin.";
+    $("#statusTitle").textContent = "Ready to lock in.";
     const outsideText = takenAgentIds.size
-      ? `, accounting for ${takenAgentIds.size} known outside ${takenAgentIds.size === 1 ? "pick" : "picks"}`
+      ? ` · ${takenAgentIds.size} outside ${takenAgentIds.size === 1 ? "pick" : "picks"} accounted for`
       : "";
-    $("#statusBody").textContent = `A valid draft exists in ${mode === "chaos" ? "Full Chaos" : "Role Balanced"}${outsideText}.`;
+    $("#statusBody").textContent = `${mode === "chaos" ? "Full Chaos" : "Role Balanced"}${outsideText}`;
   } else {
     const failure = explainFailure(currentContext());
     $("#statusTitle").textContent = failure.title;
@@ -857,17 +1013,18 @@ function checkFeasibility() {
   $("#newMatch").disabled = !matchState.draft;
   $("#copy").disabled = !matchState.draft;
   $("#copyOpen").disabled = !matchState.draft;
-  $("#spinHint").textContent = `Match ${matchState.matchNumber} · ${matchState.draft ? "active" : "ready"}`;
+  $(".share-actions").hidden = !matchState.draft;
+  $("#spinHint").textContent = matchState.draft ? "Active" : "Ready";
   $("#matchNumber").textContent = String(matchState.matchNumber).padStart(2, "0");
-  $("#rerollCount").textContent = `${matchState.rerollsRemaining} / ${REROLL_BUDGET} left`;
+  $("#rerollCount").textContent = `${matchState.rerollsRemaining} of ${REROLL_BUDGET} rerolls remaining`;
 
   const dots = $("#rerollDots");
-  dots.replaceChildren();
-  for (let index = 0; index < REROLL_BUDGET; index += 1) {
-    const dot = element("span", "reroll-dot");
-    dot.classList.toggle("spent", index >= matchState.rerollsRemaining);
-    dots.append(dot);
+  while (dots.children.length < REROLL_BUDGET) {
+    dots.append(element("span", "reroll-dot"));
   }
+  [...dots.children].forEach((dot, index) => {
+    dot.classList.toggle("spent", index >= matchState.rerollsRemaining);
+  });
 }
 
 function stopAnimations() {
@@ -878,9 +1035,18 @@ function stopAnimations() {
   pendingTimers.length = 0;
 }
 
+function bringRevealIntoView() {
+  if (!window.matchMedia("(max-width: 720px)").matches) return;
+  resultsElement.scrollIntoView({
+    behavior: reducedMotion ? "auto" : "smooth",
+    block: "start",
+  });
+}
+
 function renderResults(assignment, options = {}) {
   stopAnimations();
   resultsElement.replaceChildren();
+  resultsElement.className = `results${assignment ? " has-draft" : ""}`;
 
   if (takenAgentIds.size > 0) {
     const strip = element("div", "lobby-strip");
@@ -893,40 +1059,58 @@ function renderResults(assignment, options = {}) {
   }
 
   if (!assignment) {
-    const empty = element("div", "empty");
-    empty.append(
-      element(
-        "strong",
-        "",
-        players.length ? "Nothing spun this Match." : "Your current stack is empty.",
-      ),
-    );
-    empty.append(
-      document.createTextNode(
-        players.length
-          ? "Set ownership, mark any known outside picks, then Spin once."
-          : "Add a saved player to begin.",
-      ),
-    );
-    resultsElement.append(empty);
+    if (!players.length) {
+      const empty = element("div", "draft-empty");
+      empty.append(element("span", "draft-reticle", "+"));
+      empty.append(element("strong", "", "Your squad reveal starts here"));
+      empty.append(element("span", "", "Add players, then lock in the draft."));
+      resultsElement.append(empty);
+      return;
+    }
+
+    const placeholders = element("div", "result-grid placeholder-grid");
+    players.forEach((player, index) => {
+      const slot = element("article", "reveal-card reveal-card--waiting");
+      slot.append(element("span", "res-slot", String(index + 1).padStart(2, "0")));
+      const visual = element("span", "agent-visual", "?");
+      visual.setAttribute("aria-hidden", "true");
+      slot.append(visual);
+      const copy = element("span", "waiting-copy");
+      copy.append(element("strong", "", playerLabel(player, index)));
+      copy.append(element("small", "", "Awaiting lock-in"));
+      slot.append(copy);
+      placeholders.append(slot);
+    });
+    resultsElement.append(placeholders);
     return;
   }
 
+  const grid = element("div", "result-grid");
   assignment.forEach((agent, index) => {
     const player = players[index];
     const pinned = matchState.pinnedPlayerIds.has(player.id);
-    const row = element("article", `res${pinned ? " pinned" : ""}`);
-    row.style.color = `var(${ROLE_CSS_VARIABLES[agent.role]})`;
-    row.append(element("span", "res-slot", String(index + 1).padStart(2, "0")));
-    const main = element("span", "res-main");
-    main.append(element("span", "res-agent", agent.name));
-    const meta = element("span", "res-meta");
-    meta.append(element("span", "res-role", agent.role));
-    meta.append(element("span", "res-who", playerLabel(player, index)));
-    main.append(meta);
+    const row = element("article", `res reveal-card${pinned ? " pinned" : ""}`);
+    row.style.setProperty("--role-color", `var(${ROLE_CSS_VARIABLES[agent.role]})`);
+    row.setAttribute(
+      "aria-label",
+      `${playerLabel(player, index)} received ${agent.name}, ${agent.role}`,
+    );
+
+    const top = element("div", "reveal-top");
+    top.append(element("span", "res-slot", `Player ${String(index + 1).padStart(2, "0")}`));
+    top.append(element("strong", "res-who", playerLabel(player, index)));
+    row.append(top);
+
+    const visual = element("div", "agent-visual");
+    visual.append(element("span", "agent-mark", agentInitials(agent)));
+    row.append(visual);
+
+    const main = element("div", "res-main");
+    main.append(element("strong", "res-agent", agent.name));
+    main.append(element("span", "res-role", agent.role));
     row.append(main);
 
-    const actions = element("span", "res-acts");
+    const actions = element("div", "res-acts");
     const pinButton = actionButton(pinned ? "Pinned" : "Pin", "token");
     pinButton.dataset.action = "pin";
     pinButton.dataset.playerId = player.id;
@@ -942,31 +1126,35 @@ function renderResults(assignment, options = {}) {
     );
     actions.append(rerollButton);
     row.append(actions);
-    resultsElement.append(row);
+    grid.append(row);
 
     const shouldAnimate =
       options.animate &&
       !reducedMotion &&
       (!options.only || options.only.includes(index));
     if (shouldAnimate) {
-      scrambleResult(row, agent, options.only ? 480 : index * 130 + 200);
+      scrambleResult(row, agent, options.only ? 520 : 840 + index * 130);
     } else {
       row.classList.add("revealed");
     }
   });
+  resultsElement.append(grid);
 }
 
 function scrambleResult(row, finalAgent, duration) {
   const agentElement = row.querySelector(".res-agent");
+  const markElement = row.querySelector(".agent-mark");
   row.classList.add("scrambling");
   const interval = setInterval(() => {
-    agentElement.textContent =
-      AGENTS[Math.floor(Math.random() * AGENTS.length)].name;
+    const candidate = AGENTS[Math.floor(Math.random() * AGENTS.length)];
+    agentElement.textContent = candidate.name;
+    markElement.textContent = agentInitials(candidate);
   }, 55);
   pendingTimers.push(interval);
   const timeout = setTimeout(() => {
     clearInterval(interval);
     agentElement.textContent = finalAgent.name;
+    markElement.textContent = agentInitials(finalAgent);
     row.classList.remove("scrambling");
     row.classList.add("revealed");
   }, duration);
@@ -1093,6 +1281,7 @@ $("#roll").addEventListener("click", () => {
     only: result.movedPlayerIndexes,
   });
   checkFeasibility();
+  bringRevealIntoView();
 });
 
 $("#redraw").addEventListener("click", () => {
@@ -1176,10 +1365,14 @@ async function copyResult(openDiscord) {
 $("#copy").addEventListener("click", () => copyResult(false));
 $("#copyOpen").addEventListener("click", () => copyResult(true));
 $("#addPlayer").addEventListener("click", () => {
-  libraryOpen = !libraryOpen;
-  renderPlayers();
-  renderLibrary();
-  if (libraryOpen) $("#playerLibrary").scrollIntoView({ block: "nearest" });
+  openPlayerLibrary("choose");
+});
+$("#managePlayers").addEventListener("click", () => {
+  openPlayerLibrary(savedPlayers.length ? "manage" : "editor");
+});
+$("#playerLibrary").addEventListener("cancel", (event) => {
+  event.preventDefault();
+  closePlayerLibrary();
 });
 
 function setMode(nextMode) {
@@ -1202,40 +1395,6 @@ function setMode(nextMode) {
 
 $("#modeBalanced").addEventListener("click", () => setMode("balanced"));
 $("#modeChaos").addEventListener("click", () => setMode("chaos"));
-
-$("#resetSaved").addEventListener("click", () => {
-  if (
-    !window.confirm(
-      "Permanently delete every saved player profile and ownership setting on this device? This cannot be undone.",
-    )
-  ) {
-    return;
-  }
-  try {
-    localStorage.removeItem(PREFERENCES_KEY);
-    localStorage.removeItem(LEGACY_PREFERENCES_KEY);
-    sessionStorage.removeItem(SESSION_KEY);
-  } catch (error) {
-    console.warn("Saved data could not be removed.", error);
-  }
-  savedPlayers = [];
-  currentStackIds = [];
-  players = [];
-  preferredMode = "balanced";
-  mode = "balanced";
-  takenAgentIds = new Set();
-  lobbyOpen = false;
-  libraryOpen = true;
-  matchState = createMatchState();
-  savePreferences();
-  saveSession();
-  renderAll();
-  showNote(
-    "Player library reset.",
-    "All saved profiles were deleted. Create a new player and choose their starting ownership.",
-    true,
-  );
-});
 
 if (loadedPreferences.migratedLegacy) savePreferences();
 saveSession();
