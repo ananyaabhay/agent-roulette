@@ -1,6 +1,6 @@
 const MAX_NAME_LENGTH = 60;
-export const PREFERENCES_VERSION = 2;
-export const SESSION_VERSION = 1;
+export const PREFERENCES_VERSION = 3;
+export const SESSION_VERSION = 2;
 
 export function sanitizeProfileName(value) {
   return typeof value === "string"
@@ -10,11 +10,12 @@ export function sanitizeProfileName(value) {
 
 export function normalizeSavedPreferences(
   savedValue,
-  { agents, maxSavedPlayers = 50, makeId },
+  { agents, validMapIds = [], maxSavedPlayers = 50, makeId },
 ) {
   if (!savedValue || typeof savedValue !== "object") return null;
 
   const validAgentIds = new Set(agents.map((agent) => agent.id));
+  const validMaps = new Set(validMapIds);
   const starterAgentIds = agents
     .filter((agent) => agent.starter)
     .map((agent) => agent.id);
@@ -51,10 +52,10 @@ export function normalizeSavedPreferences(
     });
 
   return {
-    preferredMode:
-      savedValue.preferredMode === "chaos" || savedValue.mode === "chaos"
-        ? "chaos"
-        : "balanced",
+    preferredMode: normalizeMode(savedValue.preferredMode ?? savedValue.mode),
+    selectedMapId: validMaps.has(savedValue.selectedMapId)
+      ? savedValue.selectedMapId
+      : "",
     savedPlayers,
     migratedCurrentStackIds: isLegacy
       ? savedPlayers.slice(0, 5).map((player) => player.id)
@@ -62,10 +63,11 @@ export function normalizeSavedPreferences(
   };
 }
 
-export function serializePreferences({ preferredMode, savedPlayers }) {
+export function serializePreferences({ preferredMode, selectedMapId, savedPlayers }) {
   return {
     version: PREFERENCES_VERSION,
-    preferredMode: preferredMode === "chaos" ? "chaos" : "balanced",
+    preferredMode: normalizeMode(preferredMode),
+    selectedMapId: typeof selectedMapId === "string" ? selectedMapId : "",
     savedPlayers: savedPlayers.map((player) => ({
       id: player.id,
       name: sanitizeProfileName(player.name),
@@ -76,12 +78,13 @@ export function serializePreferences({ preferredMode, savedPlayers }) {
 
 export function normalizeSessionState(
   savedValue,
-  { savedPlayers, agents, maxTeamSize, rerollBudget },
+  { savedPlayers, agents, validMapIds = [], maxTeamSize, rerollBudget },
 ) {
   if (!savedValue || typeof savedValue !== "object") return null;
 
   const validPlayerIds = new Set(savedPlayers.map((player) => player.id));
   const validAgentIds = new Set(agents.map((agent) => agent.id));
+  const validMaps = new Set(validMapIds);
   const currentStackIds = uniqueValidStrings(
     savedValue.currentStackIds,
     validPlayerIds,
@@ -91,7 +94,10 @@ export function normalizeSessionState(
     savedValue.takenAgentIds,
     validAgentIds,
   ).slice(0, outsideSeatCount);
-  const mode = savedValue.mode === "chaos" ? "chaos" : "balanced";
+  const mode = normalizeMode(savedValue.mode);
+  const selectedMapId = validMaps.has(savedValue.selectedMapId)
+    ? savedValue.selectedMapId
+    : "";
   const rawMatch = savedValue.matchState;
   const matchNumber =
     Number.isSafeInteger(rawMatch?.matchNumber) && rawMatch.matchNumber > 0
@@ -108,38 +114,69 @@ export function normalizeSessionState(
     rawDraft.every(
       (agentId) =>
         validAgentIds.has(agentId) && !takenAgentIds.includes(agentId),
-    )
+    ) &&
+    (mode !== "map" || selectedMapId)
       ? rawDraft.slice()
       : null;
   const pinnedPlayerIds = draftAgentIds
     ? uniqueValidStrings(rawMatch?.pinnedPlayerIds, new Set(currentStackIds))
     : [];
-  const rerollsRemaining = draftAgentIds
-    ? clampInteger(rawMatch?.rerollsRemaining, 0, rerollBudget, rerollBudget)
+
+  const legacySharedRemaining = clampInteger(
+    rawMatch?.rerollsRemaining,
+    0,
+    rerollBudget,
+    rerollBudget,
+  );
+  const rawPersonal = rawMatch?.personalRerollsRemaining;
+  const personalRerollsRemaining = Object.fromEntries(
+    currentStackIds.map((playerId) => [
+      playerId,
+      draftAgentIds
+        ? clampInteger(
+            readPersonalBudget(rawPersonal, playerId),
+            0,
+            rerollBudget,
+            legacySharedRemaining,
+          )
+        : rerollBudget,
+    ]),
+  );
+  const teamRedrawsRemaining = draftAgentIds
+    ? clampInteger(
+        rawMatch?.teamRedrawsRemaining,
+        0,
+        rerollBudget,
+        legacySharedRemaining,
+      )
     : rerollBudget;
 
   return {
     mode,
+    selectedMapId,
     currentStackIds,
     takenAgentIds,
     matchState: {
       matchNumber,
       draftAgentIds,
       pinnedPlayerIds,
-      rerollsRemaining,
+      personalRerollsRemaining,
+      teamRedrawsRemaining,
     },
   };
 }
 
 export function serializeSessionState({
   mode,
+  selectedMapId,
   currentStackIds,
   takenAgentIds,
   matchState,
 }) {
   return {
     version: SESSION_VERSION,
-    mode: mode === "chaos" ? "chaos" : "balanced",
+    mode: normalizeMode(mode),
+    selectedMapId: typeof selectedMapId === "string" ? selectedMapId : "",
     currentStackIds: [...currentStackIds],
     takenAgentIds: [...takenAgentIds],
     matchState: {
@@ -148,9 +185,23 @@ export function serializeSessionState({
         ? matchState.draft.map((agent) => agent.id)
         : null,
       pinnedPlayerIds: [...matchState.pinnedPlayerIds],
-      rerollsRemaining: matchState.rerollsRemaining,
+      personalRerollsRemaining: Object.fromEntries(
+        matchState.personalRerollsRemaining || [],
+      ),
+      teamRedrawsRemaining: matchState.teamRedrawsRemaining,
     },
   };
+}
+
+function normalizeMode(value) {
+  return value === "chaos" || value === "map" ? value : "balanced";
+}
+
+function readPersonalBudget(value, playerId) {
+  if (Array.isArray(value)) {
+    return value.find((entry) => entry?.[0] === playerId)?.[1];
+  }
+  return value && typeof value === "object" ? value[playerId] : undefined;
 }
 
 function uniqueValidStrings(value, allowedValues) {
