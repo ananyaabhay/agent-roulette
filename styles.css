@@ -42,13 +42,14 @@ body {
   background-size: 32px 32px, 32px 32px, auto, auto;
   color: var(--ink);
   font-family: var(--body);
-  font-size: 15px;
+  font-size: 16px;
   line-height: 1.45;
   -webkit-font-smoothing: antialiased;
 }
 
 button,
-input {
+input,
+select {
   font: inherit;
 }
 
@@ -79,7 +80,7 @@ button:disabled {
 }
 
 .app-shell {
-  width: min(100% - 32px, 1380px);
+  width: min(100% - 40px, 1560px);
   margin: 0 auto;
 }
 
@@ -161,17 +162,18 @@ button:disabled {
 
 .command-grid {
   display: grid;
-  grid-template-columns: minmax(390px, 0.84fr) minmax(520px, 1.16fr);
-  gap: 20px;
-  padding: 20px 0 34px;
+  grid-template-columns: minmax(420px, 0.76fr) minmax(620px, 1.24fr);
+  gap: 24px;
+  padding: 24px 0 38px;
 }
 
 .setup-panel,
 .draft-panel {
   min-width: 0;
-  border: 1px solid var(--rule);
-  background: rgba(14, 18, 22, 0.94);
-  box-shadow: 0 18px 70px rgba(0, 0, 0, 0.18);
+  border: 1px solid rgba(255, 255, 255, 0.08);
+  background: rgba(14, 18, 22, 0.76);
+  box-shadow: 0 20px 72px rgba(0, 0, 0, 0.2);
+  backdrop-filter: blur(18px);
 }
 
 .setup-panel {
@@ -651,9 +653,9 @@ button:disabled {
 }
 
 .chip[aria-pressed="true"] {
-  border-color: currentColor;
-  background: currentColor;
-  color: var(--paper);
+  border-color: var(--chip-accent);
+  background: color-mix(in srgb, var(--chip-accent) 24%, var(--panel-raised));
+  color: var(--ink);
   font-weight: 600;
 }
 
@@ -831,10 +833,12 @@ button:disabled {
 .mode-rail {
   display: inline-flex;
   flex: 0 0 auto;
+  min-width: min(100%, 390px);
   border: 1px solid var(--rule-hard);
 }
 
 .mode-rail button {
+  flex: 1 1 0;
   min-height: 38px;
   padding: 7px 12px;
   border: 0;
@@ -842,7 +846,7 @@ button:disabled {
   color: var(--muted);
   cursor: pointer;
   font-family: var(--mono);
-  font-size: 9px;
+  font-size: 10px;
   letter-spacing: 0.07em;
   text-transform: uppercase;
 }
@@ -859,7 +863,94 @@ button:disabled {
 .mode-description {
   margin: 0;
   color: var(--muted);
+  font-size: 11px;
+}
+
+.map-panel {
+  display: grid;
+  grid-template-columns: minmax(190px, 0.7fr) minmax(260px, 1.3fr);
+  gap: 12px;
+  margin-top: 12px;
+  padding: 12px;
+  background: rgba(122, 170, 255, 0.055);
+}
+
+.map-panel label,
+.map-panel label span {
+  display: block;
+}
+
+.map-panel select {
+  width: 100%;
+  min-height: 44px;
+  padding: 8px 34px 8px 11px;
+  border: 1px solid var(--rule-hard);
+  border-radius: 0;
+  background: var(--panel-soft);
+  color: var(--ink);
+}
+
+.map-intel {
+  align-self: start;
+  border-left: 1px solid var(--rule);
+  padding-left: 12px;
+}
+
+.map-intel summary {
+  min-height: 28px;
+  color: var(--controller);
+  cursor: pointer;
+  font-family: var(--mono);
   font-size: 10px;
+  font-weight: 600;
+  letter-spacing: 0.08em;
+  text-transform: uppercase;
+}
+
+.map-intel p {
+  margin: 6px 0 0;
+  color: var(--muted);
+  font-size: 11px;
+}
+
+.map-intel-heading strong,
+.map-intel-heading span {
+  display: block;
+}
+
+.map-intel-heading strong {
+  font-size: 12px;
+  text-transform: capitalize;
+}
+
+.map-intel-heading span,
+.map-observed span {
+  color: var(--quiet);
+  font-family: var(--mono);
+  font-size: 8px;
+  text-transform: uppercase;
+}
+
+.map-observed {
+  display: flex;
+  flex-wrap: wrap;
+  gap: 5px;
+  margin-top: 8px;
+}
+
+.map-observed span {
+  flex-basis: 100%;
+}
+
+.map-observed b {
+  padding: 3px 5px;
+  background: rgba(255, 255, 255, 0.055);
+  font-size: 9px;
+  font-weight: 500;
+}
+
+.map-source a {
+  color: var(--ink);
 }
 
 .status {
@@ -975,8 +1066,8 @@ button:disabled {
 
 .result-grid {
   display: grid;
-  grid-template-columns: repeat(auto-fit, minmax(min(100%, 180px), 1fr));
-  gap: 8px;
+  grid-template-columns: repeat(auto-fit, minmax(min(100%, 158px), 1fr));
+  gap: 10px;
 }
 
 .reveal-card {
@@ -984,11 +1075,11 @@ button:disabled {
   position: relative;
   display: flex;
   min-width: 0;
-  min-height: 276px;
+  min-height: 304px;
   flex-direction: column;
   padding: 13px;
   border: 1px solid var(--rule);
-  background: var(--panel);
+  background: rgba(18, 22, 27, 0.84);
   overflow: hidden;
   isolation: isolate;
 }
@@ -1057,13 +1148,12 @@ button:disabled {
 .agent-visual {
   position: relative;
   display: grid;
-  min-height: 112px;
+  min-height: 152px;
   margin: 13px 0 11px;
-  place-items: center;
-  border: 1px solid var(--rule);
+  place-items: end center;
   background:
     linear-gradient(135deg, rgba(255, 255, 255, 0.03), transparent 54%),
-    var(--panel-soft);
+    color-mix(in srgb, var(--role-color) 8%, var(--panel-soft));
   color: var(--role-color);
   overflow: hidden;
 }
@@ -1092,13 +1182,26 @@ button:disabled {
   border-bottom: 1px solid;
 }
 
-.agent-mark {
+.agent-portrait {
+  display: block;
+  width: 100%;
+  height: 150px;
+  object-fit: contain;
+  object-position: center bottom;
+  filter: drop-shadow(0 14px 24px rgba(0, 0, 0, 0.5));
+  transform: scale(1.08);
+}
+
+.agent-fallback {
+  align-self: center;
+  padding: 12px;
+  color: var(--ink);
   font-family: var(--display);
-  font-size: 58px;
-  font-weight: 900;
-  line-height: 1;
-  letter-spacing: -0.03em;
-  text-shadow: 0 0 30px currentColor;
+  font-size: 27px;
+  font-weight: 800;
+  line-height: 0.95;
+  text-align: center;
+  text-transform: uppercase;
 }
 
 .res-main {
@@ -1151,7 +1254,7 @@ button:disabled {
   opacity: 1;
 }
 
-.reveal-card.scrambling .agent-mark,
+.reveal-card.scrambling .agent-portrait,
 .reveal-card.scrambling .res-agent {
   color: var(--muted);
   filter: blur(0.5px);
@@ -1181,6 +1284,32 @@ button:disabled {
   color: var(--quiet);
   font-family: var(--display);
   font-size: 34px;
+}
+
+.composition-summary {
+  display: grid;
+  gap: 10px;
+  margin-top: 12px;
+  padding: 12px 14px;
+  background: rgba(255, 255, 255, 0.035);
+}
+
+.composition-heading strong,
+.composition-heading span {
+  display: block;
+}
+
+.composition-heading strong {
+  font-size: 13px;
+}
+
+.map-reasons {
+  display: grid;
+  gap: 5px;
+  margin: 0;
+  padding-left: 18px;
+  color: var(--muted);
+  font-size: 11px;
 }
 
 .waiting-copy,
@@ -1558,7 +1687,7 @@ button:disabled {
 
 footer {
   display: grid;
-  grid-template-columns: 1.2fr 1fr 1.5fr;
+  grid-template-columns: repeat(4, minmax(0, 1fr));
   gap: 20px;
   padding: 19px 0 34px;
   border-top: 1px solid var(--rule-hard);
@@ -1610,6 +1739,10 @@ footer p {
   .reveal-card {
     min-height: 250px;
   }
+
+  footer {
+    grid-template-columns: repeat(2, minmax(0, 1fr));
+  }
 }
 
 @media (max-width: 860px) {
@@ -1629,7 +1762,7 @@ footer p {
 
 @media (max-width: 720px) {
   .app-shell {
-    width: min(100% - 24px, 1380px);
+    width: min(100% - 24px, 1560px);
   }
 
   .topbar {
@@ -1665,7 +1798,18 @@ footer p {
   }
 
   .mode-rail button {
-    flex: 1 1 50%;
+    flex: 1 1 33.333%;
+  }
+
+  .map-panel {
+    grid-template-columns: 1fr;
+  }
+
+  .map-intel {
+    border-top: 1px solid var(--rule);
+    border-left: 0;
+    padding-top: 10px;
+    padding-left: 0;
   }
 
   .result-grid {
@@ -1676,8 +1820,8 @@ footer p {
     min-height: 238px;
   }
 
-  .agent-mark {
-    font-size: 48px;
+  .agent-portrait {
+    height: 135px;
   }
 
   .draft-actions {
@@ -1700,7 +1844,11 @@ footer p {
 
 @media (max-width: 470px) {
   .app-shell {
-    width: min(100% - 20px, 1380px);
+    width: min(100% - 20px, 1560px);
+  }
+
+  .build-stamp {
+    display: none;
   }
 
   .brand-copy small {
