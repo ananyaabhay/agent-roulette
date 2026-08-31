@@ -24,16 +24,34 @@ test("visible product copy consistently uses Match terminology", async () => {
   assert.match(appSource, /Match.*restored/);
 });
 
-test("first-time ownership, player library, Match persistence, and Discord flow are present", async () => {
+test("unified player setup, Match persistence, and Discord flow are present", async () => {
   const [appSource, htmlSource] = await Promise.all([
     readFile(appUrl, "utf8"),
     readFile(htmlUrl, "utf8"),
   ]);
-  assert.match(appSource, /Default agents only/);
-  assert.match(appSource, /All agents/);
+  assert.match(htmlSource, /Who’s playing\?/);
+  assert.match(appSource, /Select all/);
+  assert.match(appSource, /Reset to defaults/);
+  assert.match(appSource, /Save & add to stack/);
+  assert.doesNotMatch(appSource, /Default agents only/);
+  assert.doesNotMatch(appSource, /All agents/);
   assert.match(htmlSource, /playerLibrary/);
   assert.match(appSource, /sessionStorage/);
   assert.match(htmlSource, /Copy &amp; open Discord/);
+});
+
+test("squad reveal and shared reroll presentation are wired", async () => {
+  const [appSource, htmlSource, cssSource] = await Promise.all([
+    readFile(appUrl, "utf8"),
+    readFile(htmlUrl, "utf8"),
+    readFile(cssUrl, "utf8"),
+  ]);
+  assert.match(htmlSource, /Lock us in/);
+  assert.match(appSource, /agent-mark/);
+  assert.match(appSource, /rerolls remaining/);
+  assert.match(cssSource, /\.reroll-dot\s*\{/);
+  assert.match(cssSource, /border-radius:\s*50%/);
+  assert.match(cssSource, /\.reveal-card/);
 });
 
 test("metadata, favicon, focus styles, reduced motion, and mobile targets are wired", async () => {
