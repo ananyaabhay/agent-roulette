@@ -1,22 +1,25 @@
 import { AGENTS, REROLL_BUDGET } from "../data/game-data.js";
 import {
   getAvailableAgents,
-  shuffled,
+  orderCandidates,
   solveDraft,
   validateDraft,
 } from "./solver.js";
 
-export function createMatchState(matchNumber = 1) {
+export function createMatchState(matchNumber = 1, playerIds = []) {
   return {
     matchNumber,
     draft: null,
     pinnedPlayerIds: new Set(),
-    rerollsRemaining: REROLL_BUDGET,
+    personalRerollsRemaining: new Map(
+      playerIds.map((playerId) => [playerId, REROLL_BUDGET]),
+    ),
+    teamRedrawsRemaining: REROLL_BUDGET,
   };
 }
 
-export function startNewMatch(matchState) {
-  return createMatchState((matchState?.matchNumber || 0) + 1);
+export function startNewMatch(matchState, playerIds = []) {
+  return createMatchState((matchState?.matchNumber || 0) + 1, playerIds);
 }
 
 export function spinInitialDraft(matchState, context) {
@@ -33,7 +36,7 @@ export function spinInitialDraft(matchState, context) {
     changed: true,
     reason: "spun",
     movedPlayerIndexes: context.players.map((_, index) => index),
-    state: { ...matchState, draft },
+    state: ensurePersonalBudgets({ ...matchState, draft }, context.players),
   };
 }
 
@@ -50,7 +53,8 @@ export function attemptPlayerReroll(matchState, playerId, context) {
   if (!matchState.draft) {
     return { changed: false, reason: "no-draft", state: matchState };
   }
-  if (matchState.rerollsRemaining <= 0) {
+  const readyState = ensurePersonalBudgets(matchState, context.players);
+  if (getPersonalRerollsRemaining(readyState, playerId) <= 0) {
     return { changed: false, reason: "no-budget", state: matchState };
   }
   if (matchState.pinnedPlayerIds.has(playerId)) {
@@ -68,7 +72,16 @@ export function attemptPlayerReroll(matchState, playerId, context) {
       .filter((_, index) => index !== playerIndex)
       .map((agent) => agent.id),
   );
-  const directCandidates = shuffled(
+  const roleCounts = Object.fromEntries(
+    (context.agents || AGENTS)
+      .map((agent) => agent.role)
+      .filter((role, index, roles) => roles.indexOf(role) === index)
+      .map((role) => [role, 0]),
+  );
+  matchState.draft.forEach((agent, index) => {
+    if (index !== playerIndex) roleCounts[agent.role] += 1;
+  });
+  const directCandidates = orderCandidates(
     getAvailableAgents(
       context.players[playerIndex],
       context.takenAgentIds,
@@ -77,13 +90,28 @@ export function attemptPlayerReroll(matchState, playerId, context) {
       (agent) => agent.id !== currentAgent.id && !otherAgentIds.has(agent.id),
     ),
     context.random,
+    context.candidateWeight,
+    {
+      player: context.players[playerIndex],
+      playerIndex,
+      assignment: matchState.draft.map((agent, index) =>
+        index === playerIndex ? null : agent,
+      ),
+      roleCounts,
+    },
   );
 
   for (const candidate of directCandidates) {
     const draft = matchState.draft.slice();
     draft[playerIndex] = candidate;
     if (validateDraft({ ...context, assignment: draft })) {
-      return successfulReroll(matchState, draft, [playerIndex], "direct");
+      return successfulPersonalReroll(
+        readyState,
+        playerId,
+        draft,
+        [playerIndex],
+        "direct",
+      );
     }
   }
 
@@ -110,8 +138,9 @@ export function attemptPlayerReroll(matchState, playerId, context) {
   }
 
   const movedPlayerIndexes = changedIndexes(matchState.draft, draft);
-  return successfulReroll(
-    matchState,
+  return successfulPersonalReroll(
+    readyState,
+    playerId,
     draft,
     movedPlayerIndexes,
     movedPlayerIndexes.length > 1 ? "cascade" : "direct",
@@ -122,7 +151,7 @@ export function redrawUnpinned(matchState, context) {
   if (!matchState.draft) {
     return { changed: false, reason: "no-draft", state: matchState };
   }
-  if (matchState.rerollsRemaining <= 0) {
+  if (matchState.teamRedrawsRemaining <= 0) {
     return { changed: false, reason: "no-budget", state: matchState };
   }
 
@@ -146,7 +175,7 @@ export function redrawUnpinned(matchState, context) {
     return { changed: false, reason: "no-alternative", state: matchState };
   }
 
-  return successfulReroll(
+  return successfulTeamRedraw(
     matchState,
     draft,
     changedIndexes(matchState.draft, draft),
@@ -218,7 +247,36 @@ function changedIndexes(before, after) {
     .filter((index) => index >= 0);
 }
 
-function successfulReroll(matchState, draft, movedPlayerIndexes, kind) {
+export function getPersonalRerollsRemaining(matchState, playerId) {
+  return matchState.personalRerollsRemaining?.get(playerId) ?? REROLL_BUDGET;
+}
+
+function ensurePersonalBudgets(matchState, players) {
+  const personalRerollsRemaining = new Map(
+    matchState.personalRerollsRemaining || [],
+  );
+  players.forEach((player) => {
+    if (!personalRerollsRemaining.has(player.id)) {
+      personalRerollsRemaining.set(player.id, REROLL_BUDGET);
+    }
+  });
+  return { ...matchState, personalRerollsRemaining };
+}
+
+function successfulPersonalReroll(
+  matchState,
+  playerId,
+  draft,
+  movedPlayerIndexes,
+  kind,
+) {
+  const personalRerollsRemaining = new Map(
+    matchState.personalRerollsRemaining,
+  );
+  personalRerollsRemaining.set(
+    playerId,
+    Math.max(0, getPersonalRerollsRemaining(matchState, playerId) - 1),
+  );
   return {
     changed: true,
     reason: kind,
@@ -226,7 +284,20 @@ function successfulReroll(matchState, draft, movedPlayerIndexes, kind) {
     state: {
       ...matchState,
       draft,
-      rerollsRemaining: Math.max(0, matchState.rerollsRemaining - 1),
+      personalRerollsRemaining,
+    },
+  };
+}
+
+function successfulTeamRedraw(matchState, draft, movedPlayerIndexes, kind) {
+  return {
+    changed: true,
+    reason: kind,
+    movedPlayerIndexes,
+    state: {
+      ...matchState,
+      draft,
+      teamRedrawsRemaining: Math.max(0, matchState.teamRedrawsRemaining - 1),
     },
   };
 }
