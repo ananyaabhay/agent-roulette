@@ -4,6 +4,9 @@ import {
   AGENTS,
   MAX_TEAM_SIZE,
   REROLL_BUDGET,
+  STRUCTURE_MAX,
+  STRUCTURE_STOPS,
+  resolveStructure,
   ROLE_CSS_VARIABLES,
   ROLES,
   STARTER_AGENT_IDS,
@@ -113,6 +116,7 @@ function loadPreferences() {
 const loadedPreferences = loadPreferences();
 let savedPlayers = loadedPreferences.normalized?.savedPlayers || [];
 let preferredMode = loadedPreferences.normalized?.preferredMode || "balanced";
+let structurePosition = loadedPreferences.normalized?.preferredStructure ?? 1;
 const storedSession =
   parseStoredJson(sessionStorage, SESSION_KEY) ||
   parseStoredJson(sessionStorage, LEGACY_SESSION_KEY);
@@ -129,7 +133,7 @@ const normalizedSession = normalizeSessionState(
 let currentStackIds = normalizedSession?.currentStackIds ||
   loadedPreferences.normalized?.migratedCurrentStackIds || [];
 let players = [];
-let mode = normalizedSession?.mode || preferredMode;
+let mode = resolveStructure(structurePosition).mode;
 let selectedMapId =
   normalizedSession?.selectedMapId ||
   loadedPreferences.normalized?.selectedMapId ||
@@ -187,6 +191,7 @@ function savePreferences() {
       JSON.stringify(
         serializePreferences({
           preferredMode,
+          preferredStructure: structurePosition,
           selectedMapId,
           savedPlayers,
         }),
@@ -264,20 +269,28 @@ function availableStackSeats() {
   return MAX_TEAM_SIZE - players.length - takenAgentIds.size;
 }
 
+/**
+ * Map influence is continuous now: strength 0 means the slider is at Role
+ * Balanced (or a map was never chosen) and no weighting applies at all.
+ */
+function currentCandidateWeight() {
+  const { mapStrength } = resolveStructure(structurePosition);
+  if (!selectedMapId || mapStrength <= 0) return null;
+  return createMapCandidateWeight({
+    mapId: selectedMapId,
+    takenAgentIds,
+    agents: AGENTS,
+    strength: mapStrength,
+  });
+}
+
 function currentContext(overrides = {}) {
   return {
     players,
     takenAgentIds,
     mode,
     agents: AGENTS,
-    candidateWeight:
-      mode === "map" && selectedMapId
-        ? createMapCandidateWeight({
-            mapId: selectedMapId,
-            takenAgentIds,
-            agents: AGENTS,
-          })
-        : null,
+    candidateWeight: currentCandidateWeight(),
     random: Math.random,
     ...overrides,
   };
@@ -540,6 +553,7 @@ function resetAllProfiles() {
   currentStackIds = [];
   players = [];
   preferredMode = "balanced";
+  structurePosition = 1;
   mode = "balanced";
   selectedMapId = "";
   takenAgentIds = new Set();
@@ -1034,27 +1048,27 @@ function summaryRow(label, value) {
 }
 
 function renderMode() {
-  $("#modeBalanced").setAttribute(
-    "aria-pressed",
-    mode === "balanced" ? "true" : "false",
-  );
-  $("#modeChaos").setAttribute(
-    "aria-pressed",
-    mode === "chaos" ? "true" : "false",
-  );
-  $("#modeMap").setAttribute(
-    "aria-pressed",
-    mode === "map" ? "true" : "false",
-  );
-  const descriptions = {
-    chaos: "Ignores role targets; ownership and distinct-agent rules still apply.",
-    balanced: "Covers sensible role targets from the squad information you supply.",
-    map: "Keeps every Role Balanced rule, then gently favours map-relevant legal options.",
-  };
-  $("#modeDescription").textContent = descriptions[mode];
+  const stop = resolveStructure(structurePosition);
+  const range = $("#structureRange");
+  if (Number(range.value) !== stop.position) range.value = String(stop.position);
+  range.setAttribute("aria-valuetext", stop.label);
+  $("#structureValue").textContent = stop.label;
+  $("#modeDescription").textContent =
+    stop.id === "map" && !selectedMapId
+      ? "Choose a map below — without one, Map Smart behaves exactly like Role Balanced."
+      : stop.description;
+
+  $("#structureScale")
+    .querySelectorAll("[data-position]")
+    .forEach((tick) => {
+      tick.classList.toggle(
+        "is-active",
+        Number(tick.dataset.position) === stop.position,
+      );
+    });
 
   const mapPanel = $("#mapPanel");
-  mapPanel.hidden = mode !== "map";
+  mapPanel.hidden = stop.id !== "map";
   const select = $("#mapSelect");
   if (select.options.length === 1) {
     MAPS.forEach((map) => {
@@ -1099,17 +1113,14 @@ function renderMapIntel() {
 }
 
 function checkFeasibility() {
-  const mapReady = mode !== "map" || Boolean(selectedMapId);
-  feasible = mapReady && players.length > 0 && Boolean(solveDraft(currentContext()));
+  // A map is optional at every slider position now, so it can never block a spin.
+  feasible = players.length > 0 && Boolean(solveDraft(currentContext()));
   const status = $("#status");
   status.classList.toggle("bad", !feasible);
 
   if (players.length === 0) {
     $("#statusTitle").textContent = "Squad waiting.";
     $("#statusBody").textContent = "Add at least one player to begin.";
-  } else if (!mapReady) {
-    $("#statusTitle").textContent = "Choose a map first.";
-    $("#statusBody").textContent = "Map Smart needs a current map before it can lock a squad.";
   } else if (feasible && matchState.draft) {
     $("#statusTitle").textContent = "Squad locked.";
     $("#statusBody").textContent = "Pin a favourite, use a personal reroll, or spend a team redraw.";
@@ -1118,8 +1129,12 @@ function checkFeasibility() {
     const outsideText = takenAgentIds.size
       ? ` · ${takenAgentIds.size} outside ${takenAgentIds.size === 1 ? "pick" : "picks"} accounted for`
       : "";
-    const labels = { chaos: "Full Chaos", balanced: "Role Balanced", map: `Map Smart · ${MAP_BY_ID.get(selectedMapId)?.name}` };
-    $("#statusBody").textContent = `${labels[mode]}${outsideText}`;
+    const mapName =
+      selectedMapId && resolveStructure(structurePosition).mapStrength > 0
+        ? ` · ${MAP_BY_ID.get(selectedMapId)?.name}`
+        : "";
+    $("#statusBody").textContent =
+      `${resolveStructure(structurePosition).label}${mapName}${outsideText}`;
   } else {
     const failure = explainFailure(currentContext());
     $("#statusTitle").textContent = failure.title;
@@ -1294,7 +1309,7 @@ function renderCompositionSummary(assignment) {
   );
   container.append(heading);
 
-  if (mode === "map" && selectedMapId) {
+  if (selectedMapId && resolveStructure(structurePosition).mapStrength > 0) {
     const reasons = explainMapDraft({
       mapId: selectedMapId,
       draft: assignment,
@@ -1528,39 +1543,50 @@ $("#playerLibrary").addEventListener("cancel", (event) => {
   closePlayerLibrary();
 });
 
-function setMode(nextMode) {
-  if (mode === nextMode) return;
-  const labels = { chaos: "Full Chaos", balanced: "Role Balanced", map: "Map Smart" };
+function setStructure(nextPosition) {
+  const next = resolveStructure(nextPosition);
+  if (next.position === structurePosition) return;
   const hadActiveMatch = Boolean(matchState.draft);
+  const changesLegality = next.mode !== mode;
+
+  // Sliding within Role Balanced only reweights preference, so an active Match
+  // survives it. Crossing the Chaos boundary changes what is legal, so it can't.
   if (
     hadActiveMatch &&
+    changesLegality &&
     !window.confirm(
-      `Switching to ${labels[nextMode]} changes the draft rules and will start a new Match. Continue?`,
+      `Moving to ${next.label} changes which drafts are legal and will start a new Match. Continue?`,
     )
   ) {
     renderMode();
     return;
   }
-  mode = nextMode;
-  preferredMode = nextMode;
-  if (hadActiveMatch) {
+
+  structurePosition = next.position;
+  mode = next.mode;
+  preferredMode = next.mode;
+  if (hadActiveMatch && changesLegality) {
     matchState = startNewMatch(matchState, currentStackIds);
   }
   savePreferences();
   saveSession();
   renderAll();
-  if (hadActiveMatch) {
+  if (hadActiveMatch && changesLegality) {
     showNote(
-      `Match ${matchState.matchNumber} is ready in ${labels[nextMode]}.`,
+      `Match ${matchState.matchNumber} is ready in ${next.label}.`,
       "The previous draft and pins were cleared. All personal rerolls and team redraws are full.",
       true,
     );
   }
 }
 
-$("#modeBalanced").addEventListener("click", () => setMode("balanced"));
-$("#modeChaos").addEventListener("click", () => setMode("chaos"));
-$("#modeMap").addEventListener("click", () => setMode("map"));
+// input = update the label as the thumb snaps; change = commit the stop.
+$("#structureRange").addEventListener("input", (event) => {
+  $("#structureValue").textContent = resolveStructure(event.target.value).label;
+});
+$("#structureRange").addEventListener("change", (event) => {
+  setStructure(event.target.value);
+});
 $("#mapSelect").addEventListener("change", (event) => {
   const nextMapId = event.target.value;
   if (nextMapId === selectedMapId) return;

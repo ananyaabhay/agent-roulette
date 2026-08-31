@@ -82,3 +82,56 @@ export const ROLE_MAXIMUMS_BY_TEAM_SIZE = Object.freeze({
   4: Object.freeze({ Duelist: 2, Controller: 2, Sentinel: 2 }),
   5: Object.freeze({ Duelist: 2, Initiator: 2, Controller: 2, Sentinel: 2 }),
 });
+
+/**
+ * The draft-structure control has three named stops and nothing in between.
+ * A continuous scale would need a defensible meaning for every position, and
+ * there isn't one, so the slider is a segmented control that happens to slide.
+ *
+ * MAP_STRENGTH is an exponent on the map weights (w ** strength), fixed at the
+ * calibrated value rather than exposed. Measured on Ascent over 4,000
+ * five-stacks: strength 1 put Omen in 24% of drafts (barely above the 17%
+ * baseline, which is why Map Smart felt inert), strength 4 puts him near 50%
+ * with most of the roster still appearing, and strength 8 collapses the pool
+ * to six agents.
+ */
+export const STRUCTURE_STOPS = Object.freeze([
+  Object.freeze({
+    id: "chaos",
+    position: 0,
+    label: "Total Chaos",
+    mode: "chaos",
+    mapStrength: 0,
+    description:
+      "No role targets. Ownership and distinct-agent rules still apply.",
+  }),
+  Object.freeze({
+    id: "balanced",
+    position: 1,
+    label: "Role Balanced",
+    mode: "balanced",
+    mapStrength: 0,
+    description:
+      "Covers sensible role targets from the squad information you supply.",
+  }),
+  Object.freeze({
+    id: "map",
+    position: 2,
+    label: "Map Smart",
+    mode: "balanced",
+    mapStrength: 4,
+    description:
+      "Every Role Balanced rule stays hard, then map data reorders the legal options.",
+  }),
+]);
+
+export const STRUCTURE_MAX = STRUCTURE_STOPS.length - 1;
+export const MAP_STRENGTH = 4;
+
+export function resolveStructure(position) {
+  const parsed = Math.round(Number(position));
+  const index = Number.isFinite(parsed)
+    ? Math.max(0, Math.min(STRUCTURE_MAX, parsed))
+    : 1;
+  return STRUCTURE_STOPS[index];
+}

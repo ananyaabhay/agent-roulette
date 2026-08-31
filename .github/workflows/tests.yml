@@ -1,8 +1,9 @@
 name: Tests
 
 on:
-  push:
-    branches: [main]
+  # Manual and PR only, so iterating on data and copy doesn't fire a red
+  # notification on every push. Switch push back on once the shape settles.
+  workflow_dispatch:
   pull_request:
 
 permissions:

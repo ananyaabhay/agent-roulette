@@ -122,16 +122,26 @@
           </div>
 
           <div class="mode-row">
-            <div class="mode-rail" role="group" aria-label="Draft mode">
-              <button id="modeChaos" type="button" aria-pressed="false">
-                Full Chaos
-              </button>
-              <button id="modeBalanced" type="button" aria-pressed="true">
-                Role Balanced
-              </button>
-              <button id="modeMap" type="button" aria-pressed="false">
-                Map Smart
-              </button>
+            <div class="structure-control">
+              <div class="structure-head">
+                <label for="structureRange">Draft structure</label>
+                <output class="structure-value" id="structureValue" for="structureRange"></output>
+              </div>
+              <input
+                type="range"
+                id="structureRange"
+                class="structure-range"
+                min="0"
+                max="2"
+                step="1"
+                value="1"
+                aria-describedby="modeDescription"
+              />
+              <div class="structure-scale" id="structureScale">
+                <span data-position="0">Total Chaos</span>
+                <span data-position="1">Role Balanced</span>
+                <span data-position="2">Map Smart</span>
+              </div>
             </div>
             <p class="mode-description" id="modeDescription"></p>
           </div>

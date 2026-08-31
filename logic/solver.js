@@ -6,6 +6,23 @@ import {
   ROLES,
 } from "../data/game-data.js";
 
+/**
+ * The engine solves a generic problem: assign distinct items to participants
+ * under per-participant eligibility, category quotas and weighted preference.
+ * Nothing below needs to know what an agent or a map is.
+ *
+ * VALORANT is the default ruleset, not a dependency. Pass your own `ruleset`
+ * and the same solver drives a different domain with no changes in logic/ —
+ * tests/ruleset.test.js proves this against a non-VALORANT ruleset.
+ */
+export const DEFAULT_RULESET = Object.freeze({
+  categories: ROLES,
+  categoryOf: (item) => item.role,
+  minimumsBySize: ROLE_MINIMUMS_BY_TEAM_SIZE,
+  maximumsBySize: ROLE_MAXIMUMS_BY_TEAM_SIZE,
+  maxGroupSize: MAX_TEAM_SIZE,
+});
+
 export function shuffled(items, random = Math.random) {
   const copy = items.slice();
   for (let index = copy.length - 1; index > 0; index -= 1) {
@@ -52,8 +69,8 @@ function indexAgents(agents) {
   return new Map(agents.map((agent) => [agent.id, agent]));
 }
 
-function emptyRoleCounts() {
-  return Object.fromEntries(ROLES.map((role) => [role, 0]));
+function emptyRoleCounts(ruleset = DEFAULT_RULESET) {
+  return Object.fromEntries(ruleset.categories.map((role) => [role, 0]));
 }
 
 export function getAvailableAgents(
@@ -75,13 +92,14 @@ export function getRoleQuotas({
   stackSize,
   takenAgentIds = new Set(),
   agents = AGENTS,
+  ruleset = DEFAULT_RULESET,
 }) {
   const byId = indexAgents(agents);
   const takenAgents = [...takenAgentIds]
     .map((agentId) => byId.get(agentId))
     .filter(Boolean);
   const accountedTeamSize = Math.min(
-    MAX_TEAM_SIZE,
+    ruleset.maxGroupSize,
     stackSize + takenAgents.length,
   );
 
@@ -94,16 +112,17 @@ export function getRoleQuotas({
     };
   }
 
-  const minimums = { ...(ROLE_MINIMUMS_BY_TEAM_SIZE[accountedTeamSize] || {}) };
+  const minimums = { ...(ruleset.minimumsBySize[accountedTeamSize] || {}) };
   const targetMinimums = { ...minimums };
-  const maximums = { ...(ROLE_MAXIMUMS_BY_TEAM_SIZE[accountedTeamSize] || {}) };
+  const maximums = { ...(ruleset.maximumsBySize[accountedTeamSize] || {}) };
 
   for (const agent of takenAgents) {
-    if (minimums[agent.role] != null) {
-      minimums[agent.role] = Math.max(0, minimums[agent.role] - 1);
+    const category = ruleset.categoryOf(agent);
+    if (minimums[category] != null) {
+      minimums[category] = Math.max(0, minimums[category] - 1);
     }
-    if (maximums[agent.role] != null) {
-      maximums[agent.role] = Math.max(0, maximums[agent.role] - 1);
+    if (maximums[category] != null) {
+      maximums[category] = Math.max(0, maximums[category] - 1);
     }
   }
 
@@ -129,6 +148,7 @@ export function solveDraft({
   preferredAgentIds = new Map(),
   candidateWeight = null,
   random = Math.random,
+  ruleset = DEFAULT_RULESET,
 }) {
   const byId = indexAgents(agents);
   const { minimums, maximums } = getRoleQuotas({
@@ -136,6 +156,7 @@ export function solveDraft({
     stackSize: players.length,
     takenAgentIds,
     agents,
+    ruleset,
   });
 
   const pools = players.map((player) => {
@@ -159,21 +180,22 @@ export function solveDraft({
     .map((_, index) => index)
     .sort((left, right) => pools[left].length - pools[right].length);
   const usedAgentIds = new Set();
-  const roleCounts = emptyRoleCounts();
+  const roleCounts = emptyRoleCounts(ruleset);
   const assignment = new Array(players.length).fill(null);
 
   function minimumsStillReachable(orderIndex) {
     const remainingPlayerIndexes = playerOrder.slice(orderIndex);
     let totalMissingRoles = 0;
 
-    for (const role of ROLES) {
+    for (const role of ruleset.categories) {
       const gap = Math.max(0, (minimums[role] || 0) - roleCounts[role]);
       if (gap === 0) continue;
 
       totalMissingRoles += gap;
       const capablePlayers = remainingPlayerIndexes.filter((playerIndex) =>
         pools[playerIndex].some(
-          (agent) => agent.role === role && !usedAgentIds.has(agent.id),
+          (agent) =>
+            ruleset.categoryOf(agent) === role && !usedAgentIds.has(agent.id),
         ),
       ).length;
 
@@ -187,7 +209,7 @@ export function solveDraft({
     if (orderIndex === players.length) {
       // Reachability only proves a role could be filled. This terminal check
       // prevents the historical bug where the final draft omitted it anyway.
-      return ROLES.every(
+      return ruleset.categories.every(
         (role) => roleCounts[role] >= (minimums[role] || 0),
       );
     }
@@ -200,7 +222,8 @@ export function solveDraft({
       pools[playerIndex].filter(
         (agent) =>
           !usedAgentIds.has(agent.id) &&
-          roleCounts[agent.role] < (maximums[agent.role] ?? Infinity),
+          roleCounts[ruleset.categoryOf(agent)] <
+            (maximums[ruleset.categoryOf(agent)] ?? Infinity),
       ),
       random,
       candidateWeight,
@@ -222,13 +245,13 @@ export function solveDraft({
 
     for (const agent of candidates) {
       usedAgentIds.add(agent.id);
-      roleCounts[agent.role] += 1;
+      roleCounts[ruleset.categoryOf(agent)] += 1;
       assignment[playerIndex] = agent;
 
       if (assignNext(orderIndex + 1)) return true;
 
       usedAgentIds.delete(agent.id);
-      roleCounts[agent.role] -= 1;
+      roleCounts[ruleset.categoryOf(agent)] -= 1;
       assignment[playerIndex] = null;
     }
 
@@ -244,6 +267,7 @@ export function validateDraft({
   takenAgentIds = new Set(),
   mode = "balanced",
   agents = AGENTS,
+  ruleset = DEFAULT_RULESET,
 }) {
   if (!assignment || assignment.length !== players.length || assignment.some((agent) => !agent)) {
     return false;
@@ -265,13 +289,14 @@ export function validateDraft({
     stackSize: players.length,
     takenAgentIds,
     agents,
+    ruleset,
   });
-  const roleCounts = emptyRoleCounts();
+  const roleCounts = emptyRoleCounts(ruleset);
   assignment.forEach((agent) => {
-    roleCounts[agent.role] += 1;
+    roleCounts[ruleset.categoryOf(agent)] += 1;
   });
 
-  return ROLES.every(
+  return ruleset.categories.every(
     (role) =>
       roleCounts[role] >= (minimums[role] || 0) &&
       roleCounts[role] <= (maximums[role] ?? Infinity),

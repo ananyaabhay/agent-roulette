@@ -68,7 +68,9 @@ test("saved-library serialization excludes current stack and active Match state"
   });
   assert.deepEqual(Object.keys(output).sort(), [
     "preferredMode",
+    "preferredStructure",
     "savedPlayers",
+    "selectedMapId",
     "version",
   ]);
   assert.deepEqual(Object.keys(output.savedPlayers[0]).sort(), [
@@ -130,7 +132,7 @@ test("active Match session round-trips draft, pins, rerolls, picks, mode, and Ma
     ...createMatchState(4),
     draft: [byId.get("omen"), byId.get("cypher")],
     pinnedPlayerIds: new Set(["p1"]),
-    rerollsRemaining: 1,
+    teamRedrawsRemaining: 1,
   };
   const serialized = serializeSessionState({
     mode: "chaos",
@@ -150,7 +152,7 @@ test("active Match session round-trips draft, pins, rerolls, picks, mode, and Ma
   assert.equal(normalized.matchState.matchNumber, 4);
   assert.deepEqual(normalized.matchState.draftAgentIds, ["omen", "cypher"]);
   assert.deepEqual(normalized.matchState.pinnedPlayerIds, ["p1"]);
-  assert.equal(normalized.matchState.rerollsRemaining, 1);
+  assert.equal(normalized.matchState.teamRedrawsRemaining, 1);
 });
 
 test("malformed session values are filtered and an invalid draft fails closed", () => {
@@ -164,7 +166,7 @@ test("malformed session values are filtered and an invalid draft fails closed", 
         matchNumber: -8,
         draftAgentIds: ["not-an-agent"],
         pinnedPlayerIds: ["p1", "missing"],
-        rerollsRemaining: -50,
+        teamRedrawsRemaining: -50,
       },
     },
     {
@@ -180,7 +182,7 @@ test("malformed session values are filtered and an invalid draft fails closed", 
   assert.equal(normalized.matchState.matchNumber, 1);
   assert.equal(normalized.matchState.draftAgentIds, null);
   assert.deepEqual(normalized.matchState.pinnedPlayerIds, []);
-  assert.equal(normalized.matchState.rerollsRemaining, REROLL_BUDGET);
+  assert.equal(normalized.matchState.teamRedrawsRemaining, REROLL_BUDGET);
 });
 
 test("session validation caps outside picks to the number of outside seats", () => {
@@ -227,7 +229,8 @@ test("Discord result uses Match terminology and sanitized player names", () => {
     draft: [byId.get("omen")],
     players: [savedPlayer("p1", "@everyone *Ananya*")],
     pinnedPlayerIds: new Set(["p1"]),
-    rerollsRemaining: 2,
+    personalRerollsRemaining: new Map([["p1", REROLL_BUDGET - 1]]),
+    teamRedrawsRemaining: 2,
     rerollBudget: REROLL_BUDGET,
     takenAgentIds: new Set(["sage"]),
     agents: AGENTS,
