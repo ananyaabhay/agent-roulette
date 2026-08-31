@@ -4,7 +4,7 @@
  * The app never needs a live API to spin. When Riot adds an agent, this is
  * the one roster file to update; the solver reads whatever data is exported.
  */
-export const GAME_DATA_VERSION = "2026-08-31";
+export const GAME_DATA_VERSION = "13.04-2026-08-31";
 
 export const MAX_TEAM_SIZE = 5;
 export const REROLL_BUDGET = 3;
@@ -80,5 +80,5 @@ export const ROLE_MAXIMUMS_BY_TEAM_SIZE = Object.freeze({
   2: Object.freeze({}),
   3: Object.freeze({}),
   4: Object.freeze({ Duelist: 2, Controller: 2, Sentinel: 2 }),
-  5: Object.freeze({ Duelist: 2, Controller: 2, Sentinel: 2, Initiator: 3 }),
+  5: Object.freeze({ Duelist: 2, Initiator: 2, Controller: 2, Sentinel: 2 }),
 });
