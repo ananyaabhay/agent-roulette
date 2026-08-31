@@ -15,6 +15,39 @@ export function shuffled(items, random = Math.random) {
   return copy;
 }
 
+/**
+ * Randomly order candidates without replacement. A weight only changes how
+ * early a legal candidate is tried; it never changes pools or constraints.
+ */
+export function orderCandidates(
+  items,
+  random = Math.random,
+  candidateWeight = null,
+  context = {},
+) {
+  if (typeof candidateWeight !== "function") return shuffled(items, random);
+  const remaining = items.slice();
+  const ordered = [];
+  while (remaining.length) {
+    const weights = remaining.map((agent) => {
+      const value = Number(candidateWeight(agent, context));
+      return Number.isFinite(value) && value > 0 ? value : 1;
+    });
+    const total = weights.reduce((sum, value) => sum + value, 0);
+    let target = random() * total;
+    let selectedIndex = weights.length - 1;
+    for (let index = 0; index < weights.length; index += 1) {
+      target -= weights[index];
+      if (target < 0) {
+        selectedIndex = index;
+        break;
+      }
+    }
+    ordered.push(remaining.splice(selectedIndex, 1)[0]);
+  }
+  return ordered;
+}
+
 function indexAgents(agents) {
   return new Map(agents.map((agent) => [agent.id, agent]));
 }
@@ -94,6 +127,7 @@ export function solveDraft({
   fixedAgentIds = new Map(),
   forbiddenAgentIds = new Map(),
   preferredAgentIds = new Map(),
+  candidateWeight = null,
   random = Math.random,
 }) {
   const byId = indexAgents(agents);
@@ -162,13 +196,20 @@ export function solveDraft({
 
     const playerIndex = playerOrder[orderIndex];
     const player = players[playerIndex];
-    const candidates = shuffled(
+    const candidates = orderCandidates(
       pools[playerIndex].filter(
         (agent) =>
           !usedAgentIds.has(agent.id) &&
           roleCounts[agent.role] < (maximums[agent.role] ?? Infinity),
       ),
       random,
+      candidateWeight,
+      {
+        player,
+        playerIndex,
+        assignment: assignment.slice(),
+        roleCounts: { ...roleCounts },
+      },
     );
 
     const preferredId = preferredAgentIds.get(player.id);
