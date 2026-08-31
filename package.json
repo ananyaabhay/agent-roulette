@@ -5,6 +5,7 @@
   "type": "module",
   "scripts": {
     "test": "node --test",
+    "fetch:art": "node scripts/fetch-agent-art.js",
     "test:fairness": "node --test tests/randomness.test.js"
   }
 }
