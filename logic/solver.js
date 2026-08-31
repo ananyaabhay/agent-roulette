@@ -53,10 +53,16 @@ export function getRoleQuotas({
   );
 
   if (mode === "chaos") {
-    return { minimums: {}, maximums: {}, accountedTeamSize };
+    return {
+      minimums: {},
+      maximums: {},
+      targetMinimums: {},
+      accountedTeamSize,
+    };
   }
 
   const minimums = { ...(ROLE_MINIMUMS_BY_TEAM_SIZE[accountedTeamSize] || {}) };
+  const targetMinimums = { ...minimums };
   const maximums = { ...(ROLE_MAXIMUMS_BY_TEAM_SIZE[accountedTeamSize] || {}) };
 
   for (const agent of takenAgents) {
@@ -68,7 +74,7 @@ export function getRoleQuotas({
     }
   }
 
-  return { minimums, maximums, accountedTeamSize };
+  return { minimums, maximums, targetMinimums, accountedTeamSize };
 }
 
 /**
@@ -237,7 +243,7 @@ export function getTeamNeeds({
   mode = "balanced",
   agents = AGENTS,
 }) {
-  const { minimums } = getRoleQuotas({
+  const { minimums, targetMinimums } = getRoleQuotas({
     mode,
     stackSize: players.length,
     takenAgentIds,
@@ -249,29 +255,54 @@ export function getTeamNeeds({
     .filter(Boolean);
 
   return ROLES.map((role) => {
-    const capablePlayers = players.filter((player) =>
+    const playersWhoCanCover = players.filter((player) =>
       getAvailableAgents(player, takenAgentIds, agents).some(
         (agent) => agent.role === role,
       ),
     ).length;
-    const neededCount = minimums[role] || 0;
-    const coveringLobbyAgents = lobbyAgents.filter(
-      (agent) => agent.role === role,
-    );
+    const requiredFromStack = minimums[role] || 0;
+    const coveringLobbyAgents = (targetMinimums[role] || 0) > requiredFromStack
+      ? lobbyAgents.filter((agent) => agent.role === role)
+      : [];
 
     if (mode === "chaos") {
-      return { role, state: "disabled", neededCount: 0, capablePlayers, coveringLobbyAgents };
+      return {
+        role,
+        state: "disabled",
+        requiredFromStack: 0,
+        coveringLobbyAgents,
+      };
     }
-    if (neededCount > capablePlayers) {
-      return { role, state: "impossible", neededCount, capablePlayers, coveringLobbyAgents };
+    if (requiredFromStack > playersWhoCanCover) {
+      return {
+        role,
+        state: "impossible",
+        requiredFromStack,
+        coveringLobbyAgents,
+      };
     }
-    if (neededCount > 0) {
-      return { role, state: "needed", neededCount, capablePlayers, coveringLobbyAgents };
+    if (requiredFromStack > 0) {
+      return {
+        role,
+        state: "needed",
+        requiredFromStack,
+        coveringLobbyAgents,
+      };
     }
     if (coveringLobbyAgents.length > 0) {
-      return { role, state: "covered", neededCount: 0, capablePlayers, coveringLobbyAgents };
+      return {
+        role,
+        state: "covered",
+        requiredFromStack: 0,
+        coveringLobbyAgents,
+      };
     }
-    return { role, state: "flexible", neededCount: 0, capablePlayers, coveringLobbyAgents };
+    return {
+      role,
+      state: "flexible",
+      requiredFromStack: 0,
+      coveringLobbyAgents,
+    };
   });
 }
 
