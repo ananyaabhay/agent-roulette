@@ -68,6 +68,7 @@ test("saved-library serialization excludes current stack and active Match state"
   });
   assert.deepEqual(Object.keys(output).sort(), [
     "preferredMode",
+    "preferredStructure",
     "savedPlayers",
     "selectedMapId",
     "version",

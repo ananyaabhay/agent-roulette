@@ -18,7 +18,10 @@ test("visible product copy consistently uses Match terminology", async () => {
     readFile(appUrl, "utf8"),
     readFile(htmlUrl, "utf8"),
   ]);
-  assert.doesNotMatch(appSource, /\bround\b/i);
+  // The rule is about words the user reads, not identifiers. Math.round is not
+  // product copy, so strip API calls before checking for the banned term.
+  const appCopy = appSource.replace(/\bMath\.round\b/g, "");
+  assert.doesNotMatch(appCopy, /\bround\b/i);
   assert.doesNotMatch(htmlSource, /\bround\b/i);
   assert.match(htmlSource, /New Match/);
   assert.match(appSource, /Match.*restored/);

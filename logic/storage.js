@@ -1,4 +1,8 @@
 const MAX_NAME_LENGTH = 60;
+// storage.js stays import-free so it can normalize junk without pulling in game
+// data. STRUCTURE_MAX is therefore mirrored from data/game-data.js, and
+// tests/structure.test.js asserts the two never drift apart.
+const STRUCTURE_MAX = 2;
 export const PREFERENCES_VERSION = 3;
 export const SESSION_VERSION = 2;
 
@@ -53,6 +57,11 @@ export function normalizeSavedPreferences(
 
   return {
     preferredMode: normalizeMode(savedValue.preferredMode ?? savedValue.mode),
+    // Legacy saves predate the slider: map their old mode onto a position.
+    preferredStructure: normalizeStructurePosition(
+      savedValue.preferredStructure ??
+        legacyStructureForMode(savedValue.preferredMode ?? savedValue.mode),
+    ),
     selectedMapId: validMaps.has(savedValue.selectedMapId)
       ? savedValue.selectedMapId
       : "",
@@ -63,10 +72,16 @@ export function normalizeSavedPreferences(
   };
 }
 
-export function serializePreferences({ preferredMode, selectedMapId, savedPlayers }) {
+export function serializePreferences({
+  preferredMode,
+  preferredStructure,
+  selectedMapId,
+  savedPlayers,
+}) {
   return {
     version: PREFERENCES_VERSION,
     preferredMode: normalizeMode(preferredMode),
+    preferredStructure: normalizeStructurePosition(preferredStructure),
     selectedMapId: typeof selectedMapId === "string" ? selectedMapId : "",
     savedPlayers: savedPlayers.map((player) => ({
       id: player.id,
@@ -74,6 +89,19 @@ export function serializePreferences({ preferredMode, selectedMapId, savedPlayer
       ownedAgentIds: [...player.ownedAgentIds],
     })),
   };
+}
+
+/** Slider position, clamped. Anything unreadable falls back to Role Balanced. */
+function normalizeStructurePosition(value) {
+  const parsed = Number(value);
+  if (!Number.isFinite(parsed)) return 1;
+  return Math.max(0, Math.min(STRUCTURE_MAX, Math.round(parsed)));
+}
+
+function legacyStructureForMode(mode) {
+  if (mode === "chaos") return 0;
+  if (mode === "map") return 2;
+  return 1;
 }
 
 export function normalizeSessionState(

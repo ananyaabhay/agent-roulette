@@ -823,41 +823,119 @@ button:disabled {
   line-height: 0.78;
 }
 
+/* ─── DRAFT STRUCTURE ─────────────────────────────────────────────────
+   Three named stops, not a continuous scale. step="1" over 0..2 makes the
+   thumb snap, so it reads as a segmented control you can drag.
+   ─────────────────────────────────────────────────────────────────── */
 .mode-row {
-  display: flex;
-  align-items: center;
-  gap: 12px;
+  display: grid;
+  gap: 10px;
   margin-top: 14px;
 }
 
-.mode-rail {
-  display: inline-flex;
-  flex: 0 0 auto;
-  min-width: min(100%, 390px);
-  border: 1px solid var(--rule-hard);
+.structure-control {
+  display: grid;
+  gap: 6px;
+  padding: clamp(10px, 2vw, 14px);
+  border: 1px solid var(--rule);
+  background: var(--panel-soft);
 }
 
-.mode-rail button {
-  flex: 1 1 0;
-  min-height: 38px;
-  padding: 7px 12px;
-  border: 0;
-  background: transparent;
-  color: var(--muted);
-  cursor: pointer;
+.structure-head {
+  display: flex;
+  align-items: baseline;
+  justify-content: space-between;
+  gap: 10px;
+}
+
+.structure-head label {
   font-family: var(--mono);
   font-size: 10px;
-  letter-spacing: 0.07em;
+  letter-spacing: 0.14em;
   text-transform: uppercase;
+  color: var(--quiet);
 }
 
-.mode-rail button + button {
-  border-left: 1px solid var(--rule-hard);
+.structure-value {
+  font-family: var(--display);
+  font-size: clamp(16px, 2.4vw, 20px);
+  font-weight: 700;
+  letter-spacing: 0.02em;
+  text-transform: uppercase;
+  color: var(--ink);
 }
 
-.mode-rail button[aria-pressed="true"] {
+.structure-range {
+  width: 100%;
+  min-height: 44px;
+  margin: 0;
+  background: transparent;
+  cursor: pointer;
+  -webkit-appearance: none;
+  appearance: none;
+}
+
+/* one dot per stop, so the three landing points are visible on the track */
+.structure-range::-webkit-slider-runnable-track {
+  height: 4px;
+  border-radius: 2px;
+  background:
+    radial-gradient(circle at 2px 50%, var(--rule-hard) 2px, transparent 2px) left / 50% 100% no-repeat,
+    radial-gradient(circle at 50% 50%, var(--rule-hard) 2px, transparent 2px) center / 100% 100% no-repeat,
+    linear-gradient(to right, var(--accent-dark), var(--accent));
+}
+
+.structure-range::-moz-range-track {
+  height: 4px;
+  border-radius: 2px;
+  background: linear-gradient(to right, var(--accent-dark), var(--accent));
+}
+
+.structure-range::-webkit-slider-thumb {
+  -webkit-appearance: none;
+  appearance: none;
+  width: 20px;
+  height: 20px;
+  margin-top: -8px;
+  border: 2px solid var(--paper);
+  border-radius: 50%;
   background: var(--ink);
-  color: var(--paper);
+}
+
+.structure-range::-moz-range-thumb {
+  width: 20px;
+  height: 20px;
+  border: 2px solid var(--paper);
+  border-radius: 50%;
+  background: var(--ink);
+}
+
+.structure-scale {
+  display: flex;
+  justify-content: space-between;
+  gap: 8px;
+  font-family: var(--mono);
+  font-size: 9px;
+  letter-spacing: 0.1em;
+  text-transform: uppercase;
+  color: var(--quiet);
+}
+
+.structure-scale span {
+  flex: 1 1 0;
+  transition: color 0.15s ease;
+}
+
+.structure-scale span:nth-child(2) {
+  text-align: center;
+}
+
+.structure-scale span:last-child {
+  text-align: right;
+}
+
+.structure-scale span.is-active {
+  color: var(--ink);
 }
 
 .mode-description {
@@ -1753,7 +1831,7 @@ footer p {
   .icon-btn,
   .token,
   .text-button,
-  .mode-rail button,
+  .structure-range,
   .chip,
   .dialog-close {
     min-height: 44px;
@@ -1786,19 +1864,6 @@ footer p {
   .section-heading h1,
   .draft-heading h2 {
     font-size: 38px;
-  }
-
-  .mode-row {
-    align-items: stretch;
-    flex-direction: column;
-  }
-
-  .mode-rail {
-    width: 100%;
-  }
-
-  .mode-rail button {
-    flex: 1 1 33.333%;
   }
 
   .map-panel {
