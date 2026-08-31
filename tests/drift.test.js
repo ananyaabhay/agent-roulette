@@ -7,6 +7,7 @@ import { MAPS } from "../data/maps.js";
 import { MAP_META } from "../data/map-meta.js";
 import { extractPatch, findDrift } from "../scripts/check-game-data.js";
 import {
+  MAP_EVIDENCE_CAVEAT,
   describeMapEvidence,
   explainMapDraft,
   observedAgentNames,
@@ -91,11 +92,11 @@ test("every map states its sample size in plain language", () => {
   for (const [mapId, meta] of Object.entries(MAP_META)) {
     const text = describeMapEvidence(mapId);
     assert.match(text, new RegExp(String(meta.sampleSize)));
-    assert.match(text, /recorded games/);
+    assert.match(text, /recorded professional matches/);
     assert.doesNotMatch(text, /%/);
   }
   assert.match(describeMapEvidence("abyss"), /too few to be reliable/);
-  assert.match(describeMapEvidence("lotus"), /worth reading/);
+  assert.match(describeMapEvidence("lotus"), /show a real pattern/);
 });
 
 test("at zero map strength the panel says the draft ignored the map", () => {
@@ -111,4 +112,12 @@ test("at full strength the panel describes observation, not recommendation", () 
   assert.match(reasons[0], /seen most often/);
   assert.doesNotMatch(reasons.join(" "), /signal/i);
   assert.ok(reasons.some((line) => /too few to be reliable/.test(line)));
+});
+
+test("the panel discloses that the source is pro play, not the ladder", () => {
+  assert.match(MAP_EVIDENCE_CAVEAT, /professional play/);
+  assert.match(MAP_EVIDENCE_CAVEAT, /ranked ladder/);
+  for (const mapId of Object.keys(MAP_META)) {
+    assert.match(describeMapEvidence(mapId), /professional matches/);
+  }
 });

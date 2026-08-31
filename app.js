@@ -35,6 +35,7 @@ import {
   explainMapDraft,
   getCompositionSummary,
   getMapIntel,
+  MAP_EVIDENCE_CAVEAT,
   describeMapEvidence,
   observedAgentNames,
 } from "./logic/recommendations.js";
@@ -1095,6 +1096,7 @@ function renderMapIntel() {
   heading.append(
     element("strong", "", intel.map.name),
     element("span", "", describeMapEvidence(selectedMapId)),
+    element("span", "", MAP_EVIDENCE_CAVEAT),
   );
   body.append(heading);
 

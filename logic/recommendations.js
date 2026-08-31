@@ -140,6 +140,15 @@ export function observedAgentNames(mapId, agents = AGENTS, limit = 4) {
 }
 
 /**
+ * Where the snapshot comes from. This matters more than sample size: the
+ * source is professional match data, and a coordinated five-stack running a
+ * solved meta picks nothing like an ordinary lobby. Omen at 94% on Ascent
+ * describes VCT stages, not a Friday night in Unrated.
+ */
+export const MAP_EVIDENCE_CAVEAT =
+  "This is professional play, not the ranked ladder — coordinated teams pick very differently from a normal lobby.";
+
+/**
  * Plain-language disclosure of how much data sits behind a map. Confidence is
  * never applied to the weighting — every map is treated identically by the
  * solver — so this exists purely to let the reader discount what they see.
@@ -148,10 +157,10 @@ export function describeMapEvidence(mapId) {
   const intel = getMapIntel(mapId);
   if (!intel) return "";
   if (intel.confidence === "high") {
-    return `Drawn from ${intel.sampleSize} recorded games on this map — enough to be worth reading.`;
+    return `Drawn from ${intel.sampleSize} recorded professional matches on this map — enough to show a real pattern.`;
   }
   if (intel.confidence === "medium") {
-    return `Drawn from ${intel.sampleSize} recorded games. A moderate sample, so treat the order as a hint rather than a fact.`;
+    return `Drawn from ${intel.sampleSize} recorded professional matches. A moderate sample, so treat the order as a hint rather than a fact.`;
   }
-  return `Drawn from only ${intel.sampleSize} recorded games. That is too few to be reliable — a handful of matches could reorder this entirely.`;
+  return `Drawn from only ${intel.sampleSize} recorded professional matches. That is too few to be reliable — a handful of games could reorder this entirely.`;
 }
