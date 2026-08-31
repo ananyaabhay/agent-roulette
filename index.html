@@ -9,22 +9,36 @@
       name="description"
       content="Spin a role-aware Valorant draft for your stack. Respects agent unlocks, outside teammate picks, distinct agents, and a shared reroll budget."
     />
+    <meta property="og:type" content="website" />
+    <meta property="og:url" content="https://ananyaabhay.github.io/agent-roulette/" />
+    <meta property="og:title" content="Agent Roulette" />
+    <meta
+      property="og:description"
+      content="A lightweight role-aware Valorant agent randomiser for real stacks, saved ownership, outside picks, and limited rerolls."
+    />
+    <meta name="twitter:card" content="summary" />
+    <meta name="twitter:title" content="Agent Roulette" />
+    <meta
+      name="twitter:description"
+      content="Build a valid role-aware Valorant draft around the agents your stack actually owns."
+    />
+    <link rel="icon" href="./favicon.svg" type="image/svg+xml" />
     <link rel="preconnect" href="https://fonts.googleapis.com" />
     <link rel="preconnect" href="https://fonts.gstatic.com" crossorigin />
     <link
       href="https://fonts.googleapis.com/css2?family=Big+Shoulders+Display:wght@600;700;800&family=IBM+Plex+Mono:wght@400;500;600&family=IBM+Plex+Sans:wght@400;500;600&display=swap"
       rel="stylesheet"
     />
-    <link rel="stylesheet" href="./styles.css" />
-    <script type="module" src="./app.js"></script>
+    <link rel="stylesheet" href="./styles.css?v=1.3.1-2" />
+    <script type="module" src="./app.js?v=1.3.1"></script>
   </head>
   <body>
     <div class="wrap">
       <header class="masthead">
         <div class="slug" aria-label="Application details">
           <span>Agent Roulette</span>
-          <span>v1.3</span>
-          <span>No account · saved on this device</span>
+          <span>v1.3.1</span>
+          <span>No account · profiles saved on this device</span>
         </div>
         <h1>Agent<br />roulette</h1>
         <p class="lede">
@@ -36,17 +50,31 @@
       <main class="board">
         <section class="col col--left" aria-labelledby="stackTitle">
           <div class="col-head">
-            <h2 id="stackTitle">The stack</h2>
+            <h2 id="stackTitle">Current stack</h2>
             <span class="hint" id="stackHint"></span>
           </div>
 
           <div id="players"></div>
           <div class="add-row">
-            <button class="ghost" id="addPlayer" type="button">+ Add player</button>
+            <button
+              class="ghost"
+              id="addPlayer"
+              type="button"
+              aria-expanded="false"
+              aria-controls="playerLibrary"
+            >
+              + Add player
+            </button>
             <button class="text-button" id="resetSaved" type="button">
-              Reset saved player data
+              Delete all saved profiles
             </button>
           </div>
+          <section
+            class="player-library"
+            id="playerLibrary"
+            aria-label="Saved player library"
+            hidden
+          ></section>
 
           <section class="outside" id="lobbySection" aria-labelledby="lobbyTitle">
             <div class="outside-head">
@@ -57,6 +85,7 @@
               <strong id="outsideCount"></strong>
             </div>
             <p class="outside-note" id="outsideNote"></p>
+            <div class="team-seats" id="teamSeats" aria-label="Five team seats"></div>
             <div id="lobbyCard" class="player"></div>
           </section>
 
@@ -75,7 +104,7 @@
         <section class="col col--right" aria-labelledby="rouletteTitle">
           <div class="col-head">
             <h2 id="rouletteTitle">Roulette</h2>
-            <span class="hint" id="spinHint">Round 1 · ready</span>
+            <span class="hint" id="spinHint">Match 1 · ready</span>
           </div>
 
           <div class="mode-rail" role="group" aria-label="Draft mode">
@@ -98,13 +127,13 @@
 
           <div class="results" id="results"></div>
 
-          <section class="round-panel" aria-label="Round and reroll status">
+          <section class="match-panel" aria-label="Match and reroll status">
             <div>
-              <span class="round-label">Round</span>
-              <strong id="roundNumber">01</strong>
+              <span class="match-label">Match</span>
+              <strong id="matchNumber">01</strong>
             </div>
             <div class="reroll-status">
-              <span class="round-label">Rerolls</span>
+              <span class="match-label">Rerolls</span>
               <strong id="rerollCount">3 / 3 remaining</strong>
               <span class="reroll-dots" id="rerollDots" aria-hidden="true"></span>
             </div>
@@ -115,17 +144,20 @@
             <button class="ghost" id="redraw" type="button" disabled>
               Redraw unpinned
             </button>
-            <button class="ghost" id="newRound" type="button" disabled>
-              New round
+            <button class="ghost" id="newMatch" type="button" disabled>
+              New Match
             </button>
           </div>
           <p class="action-help">
-            Spin creates one draft. Any reroll spends one shared token. New Round
+            Spin creates one draft. Any reroll spends one shared token. New Match
             clears the draft and refills all three.
           </p>
 
           <div class="share-actions" aria-label="Share result">
             <button class="ghost" id="copy" type="button">Copy result</button>
+            <button class="discord-primary" id="copyOpen" type="button">
+              Copy &amp; open Discord
+            </button>
             <a
               class="discord-link"
               href="https://discord.com/channels/@me"
@@ -151,9 +183,9 @@
           professional pick rate, synergy data, or player skill.
         </p>
         <p>
-          Default agents stay enabled. Saved player profiles live only in this
-          browser on this device; drafts, outside picks, pins, and rerolls are not
-          stored.
+          Default agents stay enabled. Saved profiles stay in this browser on this
+          device. The active Match is kept only for this browser tab so a refresh
+          does not erase the draft, picks, pins, or rerolls.
         </p>
         <p>
           Fan project. Not affiliated with or endorsed by Riot Games. VALORANT and
