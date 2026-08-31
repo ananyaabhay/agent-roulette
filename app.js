@@ -1,4 +1,4 @@
-// Agent Roulette V1.4 experience layer over the stable V1.3.1 logic.
+// Agent Roulette V1.5 experience layer over the stable legality solver.
 import {
   AGENT_BY_ID,
   AGENTS,
@@ -8,6 +8,8 @@ import {
   ROLES,
   STARTER_AGENT_IDS,
 } from "./data/game-data.js";
+import { getAgentVisualPath } from "./data/agent-visuals.js";
+import { MAPS, MAP_BY_ID, MAP_IDS } from "./data/maps.js";
 import {
   explainFailure,
   getAvailableAgents,
@@ -18,12 +20,20 @@ import {
 import {
   attemptPlayerReroll,
   createMatchState,
+  getPersonalRerollsRemaining,
   reconcileActiveMatch,
   redrawUnpinned,
   spinInitialDraft,
   startNewMatch,
   togglePlayerPin,
 } from "./logic/match.js";
+import {
+  createMapCandidateWeight,
+  explainMapDraft,
+  getCompositionSummary,
+  getMapIntel,
+  observedAgentNames,
+} from "./logic/recommendations.js";
 import { formatDiscordResult } from "./logic/discord.js";
 import {
   normalizeSavedPreferences,
@@ -33,9 +43,13 @@ import {
   serializeSessionState,
 } from "./logic/storage.js";
 
-const PREFERENCES_KEY = "agent-roulette:preferences:v2";
-const LEGACY_PREFERENCES_KEY = "agent-roulette:preferences:v1";
-const SESSION_KEY = "agent-roulette:match-session:v1";
+const PREFERENCES_KEY = "agent-roulette:preferences:v3";
+const LEGACY_PREFERENCES_KEYS = [
+  "agent-roulette:preferences:v2",
+  "agent-roulette:preferences:v1",
+];
+const SESSION_KEY = "agent-roulette:match-session:v2";
+const LEGACY_SESSION_KEY = "agent-roulette:match-session:v1";
 const DISCORD_URL = "https://discord.com/channels/@me";
 const MAX_SAVED_PLAYERS = 50;
 const MAX_NAME_LENGTH = 60;
@@ -79,9 +93,14 @@ function parseStoredJson(storageArea, key) {
 
 function loadPreferences() {
   const current = parseStoredJson(localStorage, PREFERENCES_KEY);
-  const legacy = current ? null : parseStoredJson(localStorage, LEGACY_PREFERENCES_KEY);
+  const legacy = current
+    ? null
+    : LEGACY_PREFERENCES_KEYS
+        .map((key) => parseStoredJson(localStorage, key))
+        .find(Boolean);
   const normalized = normalizeSavedPreferences(current || legacy, {
     agents: AGENTS,
+    validMapIds: MAP_IDS,
     maxSavedPlayers: MAX_SAVED_PLAYERS,
     makeId: makePlayerId,
   });
@@ -94,11 +113,15 @@ function loadPreferences() {
 const loadedPreferences = loadPreferences();
 let savedPlayers = loadedPreferences.normalized?.savedPlayers || [];
 let preferredMode = loadedPreferences.normalized?.preferredMode || "balanced";
+const storedSession =
+  parseStoredJson(sessionStorage, SESSION_KEY) ||
+  parseStoredJson(sessionStorage, LEGACY_SESSION_KEY);
 const normalizedSession = normalizeSessionState(
-  parseStoredJson(sessionStorage, SESSION_KEY),
+  storedSession,
   {
     savedPlayers,
     agents: AGENTS,
+    validMapIds: MAP_IDS,
     maxTeamSize: MAX_TEAM_SIZE,
     rerollBudget: REROLL_BUDGET,
   },
@@ -107,9 +130,14 @@ let currentStackIds = normalizedSession?.currentStackIds ||
   loadedPreferences.normalized?.migratedCurrentStackIds || [];
 let players = [];
 let mode = normalizedSession?.mode || preferredMode;
+let selectedMapId =
+  normalizedSession?.selectedMapId ||
+  loadedPreferences.normalized?.selectedMapId ||
+  "";
 let takenAgentIds = new Set(normalizedSession?.takenAgentIds || []);
 let matchState = createMatchState(
   normalizedSession?.matchState.matchNumber || 1,
+  currentStackIds,
 );
 let lobbyOpen = false;
 let libraryOpen = savedPlayers.length === 0;
@@ -135,7 +163,10 @@ if (normalizedSession?.matchState.draftAgentIds) {
     matchNumber: normalizedSession.matchState.matchNumber,
     draft,
     pinnedPlayerIds: new Set(normalizedSession.matchState.pinnedPlayerIds),
-    rerollsRemaining: normalizedSession.matchState.rerollsRemaining,
+    personalRerollsRemaining: new Map(
+      Object.entries(normalizedSession.matchState.personalRerollsRemaining),
+    ),
+    teamRedrawsRemaining: normalizedSession.matchState.teamRedrawsRemaining,
   };
   if (!validateDraft({
     assignment: draft,
@@ -144,7 +175,7 @@ if (normalizedSession?.matchState.draftAgentIds) {
     mode,
     agents: AGENTS,
   })) {
-    matchState = createMatchState(matchState.matchNumber);
+    matchState = createMatchState(matchState.matchNumber, currentStackIds);
     storageRecoveryNotice = true;
   }
 }
@@ -153,9 +184,15 @@ function savePreferences() {
   try {
     localStorage.setItem(
       PREFERENCES_KEY,
-      JSON.stringify(serializePreferences({ preferredMode, savedPlayers })),
+      JSON.stringify(
+        serializePreferences({
+          preferredMode,
+          selectedMapId,
+          savedPlayers,
+        }),
+      ),
     );
-    localStorage.removeItem(LEGACY_PREFERENCES_KEY);
+    LEGACY_PREFERENCES_KEYS.forEach((key) => localStorage.removeItem(key));
   } catch (error) {
     console.warn("Agent Roulette could not save profiles on this device.", error);
   }
@@ -168,12 +205,14 @@ function saveSession() {
       JSON.stringify(
         serializeSessionState({
           mode,
+          selectedMapId,
           currentStackIds,
           takenAgentIds,
           matchState,
         }),
       ),
     );
+    sessionStorage.removeItem(LEGACY_SESSION_KEY);
   } catch (error) {
     console.warn("Agent Roulette could not save the active Match.", error);
   }
@@ -192,12 +231,21 @@ function actionButton(text, className = "icon-btn") {
   return button;
 }
 
-function agentInitials(agent) {
-  if (agent.id === "kayo") return "K/O";
-  const parts = agent.name.replace(/[^A-Za-z0-9 ]/g, "").split(/\s+/).filter(Boolean);
-  return parts.length > 1
-    ? parts.map((part) => part[0]).join("").slice(0, 3).toUpperCase()
-    : agent.name.slice(0, 2).toUpperCase();
+function createAgentVisual(agent) {
+  const visual = element("div", "agent-visual");
+  const image = element("img", "agent-portrait");
+  image.src = getAgentVisualPath(agent.id);
+  image.alt = "";
+  image.loading = "eager";
+  image.decoding = "async";
+  const fallback = element("span", "agent-fallback", agent.name);
+  fallback.hidden = true;
+  image.addEventListener("error", () => {
+    image.hidden = true;
+    fallback.hidden = false;
+  }, { once: true });
+  visual.append(image, fallback);
+  return visual;
 }
 
 function setsEqual(left, right) {
@@ -222,6 +270,14 @@ function currentContext(overrides = {}) {
     takenAgentIds,
     mode,
     agents: AGENTS,
+    candidateWeight:
+      mode === "map" && selectedMapId
+        ? createMapCandidateWeight({
+            mapId: selectedMapId,
+            takenAgentIds,
+            agents: AGENTS,
+          })
+        : null,
     random: Math.random,
     ...overrides,
   };
@@ -240,13 +296,13 @@ function changeStack(mutation, description) {
 
   mutation();
   syncPlayers();
-  if (hadActiveMatch) matchState = startNewMatch(matchState);
+  if (hadActiveMatch) matchState = startNewMatch(matchState, currentStackIds);
   saveSession();
   renderAll();
   if (hadActiveMatch) {
     showNote(
       `Match ${matchState.matchNumber} is ready.`,
-      "The previous draft and pins were cleared because the current stack changed. All three rerolls are available.",
+      "The previous draft and pins were cleared because the current stack changed. Personal rerolls and team redraws are full.",
       true,
     );
   }
@@ -316,6 +372,10 @@ function createChipGrid({ isOn, isFixed, isGone, isDisabled, onToggle }) {
       const disabled = Boolean(isDisabled?.(agent)) || fixed || gone;
       const chip = actionButton(agent.name, "chip");
       chip.dataset.agentId = agent.id;
+      chip.style.setProperty(
+        "--chip-accent",
+        `var(${ROLE_CSS_VARIABLES[agent.role]})`,
+      );
       chip.classList.toggle("fixed", fixed);
       chip.classList.toggle("gone", gone);
       chip.setAttribute("aria-pressed", isOn(agent) ? "true" : "false");
@@ -440,7 +500,9 @@ function deleteSavedProfile(profile, profileIndex) {
   savedPlayers.splice(profileIndex, 1);
   currentStackIds = currentStackIds.filter((playerId) => playerId !== profile.id);
   syncPlayers();
-  if (inStack && matchState.draft) matchState = startNewMatch(matchState);
+  if (inStack && matchState.draft) {
+    matchState = startNewMatch(matchState, currentStackIds);
+  }
   savePreferences();
   saveSession();
   libraryOpen = true;
@@ -468,8 +530,9 @@ function resetAllProfiles() {
   }
   try {
     localStorage.removeItem(PREFERENCES_KEY);
-    localStorage.removeItem(LEGACY_PREFERENCES_KEY);
+    LEGACY_PREFERENCES_KEYS.forEach((key) => localStorage.removeItem(key));
     sessionStorage.removeItem(SESSION_KEY);
+    sessionStorage.removeItem(LEGACY_SESSION_KEY);
   } catch (error) {
     console.warn("Saved data could not be removed.", error);
   }
@@ -478,6 +541,7 @@ function resetAllProfiles() {
   players = [];
   preferredMode = "balanced";
   mode = "balanced";
+  selectedMapId = "";
   takenAgentIds = new Set();
   lobbyOpen = false;
   libraryOpen = true;
@@ -485,7 +549,7 @@ function resetAllProfiles() {
   editingPlayerId = null;
   editorName = "";
   editorAgentIds = new Set(STARTER_AGENT_IDS);
-  matchState = createMatchState();
+  matchState = createMatchState(1, currentStackIds);
   savePreferences();
   saveSession();
   renderAll();
@@ -528,7 +592,7 @@ function renderPlayerEditor(panel) {
   nameInput.name = "player-name";
   nameInput.maxLength = MAX_NAME_LENGTH;
   nameInput.autocomplete = "off";
-  nameInput.placeholder = "e.g. Ananya";
+  nameInput.placeholder = "e.g. Ana";
   nameInput.value = editorName;
   nameInput.addEventListener("input", (event) => {
     editorName = sanitizeProfileName(event.target.value);
@@ -822,7 +886,7 @@ function renderLobby() {
   $("#outsideNote").textContent =
     knownCount === totalOutsideSeats
       ? "Every outside seat has a known pick. Their agents and roles now count toward this Match."
-      : "Role Balanced uses marked picks and does not guess the remaining outside seats.";
+      : "Marked picks are excluded in every mode. Smart modes also count their roles and do not guess unknown seats.";
   renderTeamSeats();
 
   lobbyElement.className = `player${lobbyOpen ? " open" : ""}`;
@@ -978,29 +1042,84 @@ function renderMode() {
     "aria-pressed",
     mode === "chaos" ? "true" : "false",
   );
-  $("#modeDescription").textContent =
-    mode === "balanced"
-      ? "Covers sensible role targets from the squad information you supply."
-      : "Ignores role targets; ownership and distinct-agent rules still apply.";
+  $("#modeMap").setAttribute(
+    "aria-pressed",
+    mode === "map" ? "true" : "false",
+  );
+  const descriptions = {
+    chaos: "Ignores role targets; ownership and distinct-agent rules still apply.",
+    balanced: "Covers sensible role targets from the squad information you supply.",
+    map: "Keeps every Role Balanced rule, then gently favours map-relevant legal options.",
+  };
+  $("#modeDescription").textContent = descriptions[mode];
+
+  const mapPanel = $("#mapPanel");
+  mapPanel.hidden = mode !== "map";
+  const select = $("#mapSelect");
+  if (select.options.length === 1) {
+    MAPS.forEach((map) => {
+      const option = element("option", "", map.name);
+      option.value = map.id;
+      select.append(option);
+    });
+  }
+  select.value = selectedMapId;
+  renderMapIntel();
+}
+
+function renderMapIntel() {
+  const body = $("#mapIntelBody");
+  body.replaceChildren();
+  if (!selectedMapId) {
+    body.append(element("p", "", "Choose a map to see the local data snapshot."));
+    return;
+  }
+  const intel = getMapIntel(selectedMapId);
+  if (!intel) return;
+  const heading = element("div", "map-intel-heading");
+  heading.append(
+    element("strong", "", `${intel.map.name} · ${intel.confidence} confidence`),
+    element("span", "", `${intel.sampleSize} observed map appearances`),
+  );
+  body.append(heading, element("p", "", intel.intel));
+  const observed = element("div", "map-observed");
+  observed.append(element("span", "", "Observed leaders"));
+  observedAgentNames(selectedMapId).forEach(({ name, pickRate }) => {
+    observed.append(element("b", "", `${name} ${pickRate}%`));
+  });
+  body.append(observed);
+  const source = element("p", "map-source");
+  source.append(document.createTextNode(`Patch 13.04 · snapshot ${intel.updatedAt} · `));
+  const link = element("a", "", "public Agent Stats source");
+  link.href = intel.sources.agentStats;
+  link.target = "_blank";
+  link.rel = "noopener noreferrer";
+  source.append(link);
+  body.append(source);
 }
 
 function checkFeasibility() {
-  feasible = players.length > 0 && Boolean(solveDraft(currentContext()));
+  const mapReady = mode !== "map" || Boolean(selectedMapId);
+  feasible = mapReady && players.length > 0 && Boolean(solveDraft(currentContext()));
   const status = $("#status");
   status.classList.toggle("bad", !feasible);
 
   if (players.length === 0) {
     $("#statusTitle").textContent = "Squad waiting.";
     $("#statusBody").textContent = "Add at least one player to begin.";
+  } else if (!mapReady) {
+    $("#statusTitle").textContent = "Choose a map first.";
+    $("#statusBody").textContent = "Map Smart needs a current map before it can lock a squad.";
   } else if (feasible && matchState.draft) {
     $("#statusTitle").textContent = "Squad locked.";
-    $("#statusBody").textContent = "Pin a favourite or spend a shared reroll.";
+    $("#statusBody").textContent = "Pin a favourite, use a personal reroll, or spend a team redraw.";
   } else if (feasible) {
     $("#statusTitle").textContent = "Ready to lock in.";
     const outsideText = takenAgentIds.size
       ? ` · ${takenAgentIds.size} outside ${takenAgentIds.size === 1 ? "pick" : "picks"} accounted for`
       : "";
-    $("#statusBody").textContent = `${mode === "chaos" ? "Full Chaos" : "Role Balanced"}${outsideText}`;
+    const labels = { chaos: "Full Chaos", balanced: "Role Balanced", map: `Map Smart · ${MAP_BY_ID.get(selectedMapId)?.name}` };
+    $("#statusBody").textContent = `${labels[mode]}${outsideText}`;
   } else {
     const failure = explainFailure(currentContext());
     $("#statusTitle").textContent = failure.title;
@@ -1009,21 +1128,21 @@ function checkFeasibility() {
 
   $("#roll").disabled = !feasible || Boolean(matchState.draft);
   $("#redraw").disabled =
-    !matchState.draft || matchState.rerollsRemaining <= 0 || !feasible;
+    !matchState.draft || matchState.teamRedrawsRemaining <= 0 || !feasible;
   $("#newMatch").disabled = !matchState.draft;
   $("#copy").disabled = !matchState.draft;
   $("#copyOpen").disabled = !matchState.draft;
   $(".share-actions").hidden = !matchState.draft;
   $("#spinHint").textContent = matchState.draft ? "Active" : "Ready";
   $("#matchNumber").textContent = String(matchState.matchNumber).padStart(2, "0");
-  $("#rerollCount").textContent = `${matchState.rerollsRemaining} of ${REROLL_BUDGET} rerolls remaining`;
+  $("#rerollCount").textContent = `${matchState.teamRedrawsRemaining} of ${REROLL_BUDGET} team redraws remaining`;
 
   const dots = $("#rerollDots");
   while (dots.children.length < REROLL_BUDGET) {
     dots.append(element("span", "reroll-dot"));
   }
   [...dots.children].forEach((dot, index) => {
-    dot.classList.toggle("spent", index >= matchState.rerollsRemaining);
+    dot.classList.toggle("spent", index >= matchState.teamRedrawsRemaining);
   });
 }
 
@@ -1047,6 +1166,9 @@ function renderResults(assignment, options = {}) {
   stopAnimations();
   resultsElement.replaceChildren();
   resultsElement.className = `results${assignment ? " has-draft" : ""}`;
+  const compositionElement = $("#compositionSummary");
+  compositionElement.hidden = true;
+  compositionElement.replaceChildren();
 
   if (takenAgentIds.size > 0) {
     const strip = element("div", "lobby-strip");
@@ -1101,9 +1223,7 @@ function renderResults(assignment, options = {}) {
     top.append(element("strong", "res-who", playerLabel(player, index)));
     row.append(top);
 
-    const visual = element("div", "agent-visual");
-    visual.append(element("span", "agent-mark", agentInitials(agent)));
-    row.append(visual);
+    row.append(createAgentVisual(agent));
 
     const main = element("div", "res-main");
     main.append(element("strong", "res-agent", agent.name));
@@ -1116,13 +1236,14 @@ function renderResults(assignment, options = {}) {
     pinButton.dataset.playerId = player.id;
     pinButton.setAttribute("aria-pressed", pinned ? "true" : "false");
     actions.append(pinButton);
-    const rerollButton = actionButton("Reroll", "token");
+    const personalRemaining = getPersonalRerollsRemaining(matchState, player.id);
+    const rerollButton = actionButton(`Reroll · ${personalRemaining}`, "token");
     rerollButton.dataset.action = "reroll";
     rerollButton.dataset.playerId = player.id;
-    rerollButton.disabled = pinned || matchState.rerollsRemaining <= 0;
+    rerollButton.disabled = pinned || personalRemaining <= 0;
     rerollButton.setAttribute(
       "aria-label",
-      `Reroll ${playerLabel(player, index)}; costs one shared reroll`,
+      `Reroll ${playerLabel(player, index)}; ${personalRemaining} personal rerolls remaining`,
     );
     actions.append(rerollButton);
     row.append(actions);
@@ -1139,26 +1260,54 @@ function renderResults(assignment, options = {}) {
     }
   });
   resultsElement.append(grid);
+  renderCompositionSummary(assignment);
 }
 
 function scrambleResult(row, finalAgent, duration) {
   const agentElement = row.querySelector(".res-agent");
-  const markElement = row.querySelector(".agent-mark");
   row.classList.add("scrambling");
   const interval = setInterval(() => {
     const candidate = AGENTS[Math.floor(Math.random() * AGENTS.length)];
     agentElement.textContent = candidate.name;
-    markElement.textContent = agentInitials(candidate);
   }, 55);
   pendingTimers.push(interval);
   const timeout = setTimeout(() => {
     clearInterval(interval);
     agentElement.textContent = finalAgent.name;
-    markElement.textContent = agentInitials(finalAgent);
     row.classList.remove("scrambling");
     row.classList.add("revealed");
   }, duration);
   pendingTimers.push(timeout);
+}
+
+function renderCompositionSummary(assignment) {
+  const container = $("#compositionSummary");
+  const composition = getCompositionSummary({
+    draft: assignment,
+    takenAgentIds,
+    agents: AGENTS,
+  });
+  const heading = element("div", "composition-heading");
+  heading.append(
+    element("span", "eyebrow", "Accounted team"),
+    element("strong", "", composition.text),
+  );
+  container.append(heading);
+
+  if (mode === "map" && selectedMapId) {
+    const reasons = explainMapDraft({
+      mapId: selectedMapId,
+      draft: assignment,
+      takenAgentIds,
+      agents: AGENTS,
+    });
+    if (reasons.length) {
+      const list = element("ul", "map-reasons");
+      reasons.forEach((reason) => list.append(element("li", "", reason)));
+      container.append(list);
+    }
+  }
+  container.hidden = false;
 }
 
 function showNote(title, body, success = false) {
@@ -1191,7 +1340,8 @@ function discordText() {
     draft: matchState.draft,
     players,
     pinnedPlayerIds: matchState.pinnedPlayerIds,
-    rerollsRemaining: matchState.rerollsRemaining,
+    personalRerollsRemaining: matchState.personalRerollsRemaining,
+    teamRedrawsRemaining: matchState.teamRedrawsRemaining,
     rerollBudget: REROLL_BUDGET,
     takenAgentIds,
     agents: AGENTS,
@@ -1227,7 +1377,10 @@ resultsElement.addEventListener("click", (event) => {
   if (!result.changed) {
     const player = players.find((candidate) => candidate.id === playerId);
     const messages = {
-      "no-budget": ["No rerolls remaining.", "Start a New Match to refill all three."],
+      "no-budget": [
+        "No personal rerolls remaining.",
+        "That player gets three more in a New Match.",
+      ],
       "no-alternative": [
         `No other agent works for ${playerLabel(player)}.`,
         "Every legal alternative is taken, pinned, unowned, or breaks the role targets. No reroll was spent.",
@@ -1255,13 +1408,13 @@ resultsElement.addEventListener("click", (event) => {
   if (otherMoved.length > 0) {
     showNote(
       `Rerolled ${playerLabel(players[targetIndex], targetIndex)} — ${otherMoved.map((index) => playerLabel(players[index], index)).join(" and ")} moved too.`,
-      "A single swap was not legal, so the solver rebuilt around pinned agents. One shared reroll was spent.",
+      "A single swap was not legal, so the solver rebuilt around pinned agents. Only the selected player spent one personal reroll.",
       true,
     );
   } else if (previousDraft[targetIndex].id !== matchState.draft[targetIndex].id) {
     showNote(
       `${playerLabel(players[targetIndex], targetIndex)} rerolled.`,
-      "One shared reroll was spent.",
+      "That player spent one personal reroll.",
       true,
     );
   }
@@ -1297,8 +1450,8 @@ $("#redraw").addEventListener("click", () => {
         "Every unpinned player must receive a different agent. The current pools cannot do that, so no reroll was spent.",
       ],
       "no-budget": [
-        "No rerolls remaining.",
-        "Start a New Match to refill all three.",
+        "No team redraws remaining.",
+        "Start a New Match to refill all three team redraws.",
       ],
     };
     const [title, body] = messages[result.reason] || [
@@ -1318,19 +1471,19 @@ $("#redraw").addEventListener("click", () => {
   checkFeasibility();
   showNote(
     "Unpinned players redrawn.",
-    "Every unpinned slot changed and one shared reroll was spent.",
+    "Every unpinned slot changed and one team redraw was spent. Personal rerolls were untouched.",
     true,
   );
 });
 
 $("#newMatch").addEventListener("click", () => {
-  matchState = startNewMatch(matchState);
+  matchState = startNewMatch(matchState, currentStackIds);
   saveSession();
   renderResults(null, { animate: false });
   checkFeasibility();
   showNote(
     `Match ${matchState.matchNumber} is ready.`,
-    "The previous draft and pins were cleared. All three rerolls are available again.",
+    "The previous draft and pins were cleared. Every player has three rerolls and the team has three redraws.",
     true,
   );
 });
@@ -1377,24 +1530,65 @@ $("#playerLibrary").addEventListener("cancel", (event) => {
 
 function setMode(nextMode) {
   if (mode === nextMode) return;
-  const previousMode = mode;
-  const previousPreferredMode = preferredMode;
-  applyReconcilableChange({
-    apply: () => {
-      mode = nextMode;
-      preferredMode = nextMode;
-    },
-    rollback: () => {
-      mode = previousMode;
-      preferredMode = previousPreferredMode;
-    },
-    persistProfiles: true,
-    description: `Switching to ${nextMode === "chaos" ? "Full Chaos" : "Role Balanced"}`,
-  });
+  const labels = { chaos: "Full Chaos", balanced: "Role Balanced", map: "Map Smart" };
+  const hadActiveMatch = Boolean(matchState.draft);
+  if (
+    hadActiveMatch &&
+    !window.confirm(
+      `Switching to ${labels[nextMode]} changes the draft rules and will start a new Match. Continue?`,
+    )
+  ) {
+    renderMode();
+    return;
+  }
+  mode = nextMode;
+  preferredMode = nextMode;
+  if (hadActiveMatch) {
+    matchState = startNewMatch(matchState, currentStackIds);
+  }
+  savePreferences();
+  saveSession();
+  renderAll();
+  if (hadActiveMatch) {
+    showNote(
+      `Match ${matchState.matchNumber} is ready in ${labels[nextMode]}.`,
+      "The previous draft and pins were cleared. All personal rerolls and team redraws are full.",
+      true,
+    );
+  }
 }
 
 $("#modeBalanced").addEventListener("click", () => setMode("balanced"));
 $("#modeChaos").addEventListener("click", () => setMode("chaos"));
+$("#modeMap").addEventListener("click", () => setMode("map"));
+$("#mapSelect").addEventListener("change", (event) => {
+  const nextMapId = event.target.value;
+  if (nextMapId === selectedMapId) return;
+  const hadActiveMatch = Boolean(matchState.draft);
+  if (
+    hadActiveMatch &&
+    !window.confirm(
+      `Changing the map to ${MAP_BY_ID.get(nextMapId)?.name || "no map"} changes Map Smart recommendations and will start a new Match. Continue?`,
+    )
+  ) {
+    event.target.value = selectedMapId;
+    return;
+  }
+  selectedMapId = nextMapId;
+  if (hadActiveMatch) {
+    matchState = startNewMatch(matchState, currentStackIds);
+  }
+  savePreferences();
+  saveSession();
+  renderAll();
+  if (hadActiveMatch) {
+    showNote(
+      `Match ${matchState.matchNumber} is ready for ${MAP_BY_ID.get(selectedMapId)?.name || "Map Smart"}.`,
+      "The previous draft and pins were cleared. All personal rerolls and team redraws are full.",
+      true,
+    );
+  }
+});
 
 if (loadedPreferences.migratedLegacy) savePreferences();
 saveSession();
@@ -1407,7 +1601,7 @@ if (storageRecoveryNotice) {
 } else if (matchState.draft) {
   showNote(
     `Match ${matchState.matchNumber} restored.`,
-    `The draft, pins, outside picks, and ${matchState.rerollsRemaining} remaining rerolls survived the refresh.`,
+    `The draft, pins, outside picks, personal rerolls, and ${matchState.teamRedrawsRemaining} team redraws survived the refresh.`,
     true,
   );
 }
