@@ -15,7 +15,6 @@
   --initiator: #f2c75c;
   --controller: #7aaaff;
   --sentinel: #68d9aa;
-  --discord: #7289da;
   --display: "Big Shoulders Display", Impact, sans-serif;
   --body: "IBM Plex Sans", system-ui, sans-serif;
   --mono: "IBM Plex Mono", ui-monospace, monospace;
@@ -80,7 +79,7 @@ button:disabled {
 }
 
 .app-shell {
-  width: min(100% - 40px, 1560px);
+  width: min(100% - 40px, 1480px);
   margin: 0 auto;
 }
 
@@ -132,7 +131,6 @@ button:disabled {
 }
 
 .brand-copy small,
-.build-stamp,
 .eyebrow,
 .section-status,
 .match-label,
@@ -150,19 +148,9 @@ button:disabled {
   letter-spacing: 0.14em;
 }
 
-.build-stamp {
-  display: flex;
-  gap: 15px;
-}
-
-.build-stamp span:first-child {
-  color: var(--accent);
-  font-weight: 600;
-}
-
 .command-grid {
   display: grid;
-  grid-template-columns: minmax(420px, 0.76fr) minmax(620px, 1.24fr);
+  grid-template-columns: clamp(380px, 29vw, 420px) minmax(0, 1fr);
   gap: 24px;
   padding: 24px 0 38px;
 }
@@ -365,11 +353,20 @@ button:disabled {
 }
 
 .player-actions {
+  flex-wrap: wrap;
   margin-top: 12px;
 }
 
+.device-save-note {
+  margin-left: auto;
+  color: var(--quiet);
+  font-family: var(--mono);
+  font-size: 9px;
+  letter-spacing: 0.06em;
+  text-transform: uppercase;
+}
+
 .button,
-.discord-primary,
 .discord-link,
 .library-add,
 .icon-btn,
@@ -392,7 +389,6 @@ button:disabled {
 }
 
 .button,
-.discord-primary,
 .discord-link,
 .library-add {
   padding: 10px 14px;
@@ -465,8 +461,7 @@ button:disabled {
   color: #ff7a86;
 }
 
-.team-context,
-.team-needs {
+.team-context {
   margin-top: 24px;
   padding-top: 18px;
   border-top: 1px solid var(--rule);
@@ -672,25 +667,20 @@ button:disabled {
 }
 
 .team-needs {
-  padding-top: 0;
+  margin-top: 16px;
+  padding-top: 14px;
+  border-top: 1px solid var(--rule);
 }
 
-.team-needs summary {
+.team-needs-head {
   display: flex;
   align-items: center;
   justify-content: space-between;
   gap: 14px;
-  min-height: 68px;
-  padding: 15px 0;
-  cursor: pointer;
-  list-style: none;
+  min-height: 48px;
 }
 
-.team-needs summary::-webkit-details-marker {
-  display: none;
-}
-
-.team-needs summary strong {
+.team-needs-head strong {
   display: block;
   font-family: var(--display);
   font-size: 23px;
@@ -705,20 +695,20 @@ button:disabled {
   border: 1px solid var(--rule);
   color: var(--muted);
   font-family: var(--mono);
-  font-size: 8px;
+  font-size: 10px;
   letter-spacing: 0.06em;
   text-align: right;
   text-transform: uppercase;
 }
 
 .team-needs-body {
-  padding: 2px 0 8px;
+  padding: 6px 0 0;
 }
 
 .team-needs-body > p {
   margin: 0 0 10px;
   color: var(--muted);
-  font-size: 11px;
+  font-size: 12px;
 }
 
 .needs-summary {
@@ -726,11 +716,6 @@ button:disabled {
   padding: 9px 10px;
   border: 1px solid var(--rule);
   background: rgba(255, 255, 255, 0.018);
-}
-
-.needs-summary.chaos {
-  color: var(--muted);
-  font-size: 11px;
 }
 
 .summary-row {
@@ -743,13 +728,13 @@ button:disabled {
 .summary-row span {
   color: var(--muted);
   font-family: var(--mono);
-  font-size: 8px;
+  font-size: 10px;
   letter-spacing: 0.04em;
   text-transform: uppercase;
 }
 
 .summary-row strong {
-  font-size: 11px;
+  font-size: 12px;
 }
 
 .need-row {
@@ -762,7 +747,7 @@ button:disabled {
 
 .need-role {
   font-family: var(--mono);
-  font-size: 9px;
+  font-size: 10px;
   font-weight: 600;
   letter-spacing: 0.05em;
   text-transform: uppercase;
@@ -774,16 +759,12 @@ button:disabled {
 }
 
 .need-state strong {
-  font-size: 11px;
+  font-size: 12px;
 }
 
 .need-state span {
   color: var(--muted);
-  font-size: 9px;
-}
-
-.need-row.covered .need-state strong {
-  color: var(--go);
+  font-size: 11px;
 }
 
 .need-row.impossible .need-state strong {
@@ -823,7 +804,7 @@ button:disabled {
   line-height: 0.78;
 }
 
-/* ─── DRAFT STRUCTURE ─────────────────────────────────────────────────
+/* ─── ROLL STYLE ──────────────────────────────────────────────────────
    Three named stops, not a continuous scale. step="1" over 0..2 makes the
    thumb snap, so it reads as a segmented control you can drag.
    ─────────────────────────────────────────────────────────────────── */
@@ -854,15 +835,6 @@ button:disabled {
   letter-spacing: 0.14em;
   text-transform: uppercase;
   color: var(--quiet);
-}
-
-.structure-value {
-  font-family: var(--display);
-  font-size: clamp(16px, 2.4vw, 20px);
-  font-weight: 700;
-  letter-spacing: 0.02em;
-  text-transform: uppercase;
-  color: var(--ink);
 }
 
 .structure-range {
@@ -915,7 +887,7 @@ button:disabled {
   justify-content: space-between;
   gap: 8px;
   font-family: var(--mono);
-  font-size: 9px;
+  font-size: 10px;
   letter-spacing: 0.1em;
   text-transform: uppercase;
   color: var(--quiet);
@@ -941,10 +913,20 @@ button:disabled {
 /* ─── STATUS BADGE ────────────────────────────────────────────────────
    Colour tracks real feasibility, not just whether a draft exists.
    ─────────────────────────────────────────────────────────────────── */
+#spinHint::before {
+  display: inline-block;
+  width: 6px;
+  height: 6px;
+  margin-right: 5px;
+  border-radius: 50%;
+  background: currentColor;
+  content: "";
+}
+
 #spinHint[data-tone="idle"] { color: var(--quiet); }
 #spinHint[data-tone="bad"] { color: var(--accent); }
-#spinHint[data-tone="ready"] { color: var(--go); }
-#spinHint[data-tone="locked"] { color: var(--ink); }
+#spinHint[data-tone="ready"],
+#spinHint[data-tone="locked"] { color: var(--go); }
 
 /* Ranked names, never percentages — see logic/recommendations.js. */
 .map-observed b {
@@ -961,7 +943,7 @@ button:disabled {
 .mode-description {
   margin: 0;
   color: var(--muted);
-  font-size: 11px;
+  font-size: 12px;
 }
 
 .map-panel {
@@ -1008,7 +990,7 @@ button:disabled {
 .map-intel p {
   margin: 6px 0 0;
   color: var(--muted);
-  font-size: 11px;
+  font-size: 12px;
 }
 
 .map-intel-heading strong,
@@ -1025,7 +1007,7 @@ button:disabled {
 .map-observed span {
   color: var(--quiet);
   font-family: var(--mono);
-  font-size: 8px;
+  font-size: 10px;
   text-transform: uppercase;
 }
 
@@ -1043,7 +1025,7 @@ button:disabled {
 .map-observed b {
   padding: 3px 5px;
   background: rgba(255, 255, 255, 0.055);
-  font-size: 9px;
+  font-size: 10px;
   font-weight: 500;
 }
 
@@ -1064,6 +1046,19 @@ button:disabled {
 
 .status.bad {
   background: rgba(255, 70, 85, 0.04);
+}
+
+.status.status--quiet {
+  position: absolute;
+  width: 1px;
+  height: 1px;
+  min-height: 0;
+  margin: -1px;
+  padding: 0;
+  border: 0;
+  overflow: hidden;
+  clip: rect(0, 0, 0, 0);
+  white-space: nowrap;
 }
 
 .status-dot {
@@ -1091,7 +1086,7 @@ button:disabled {
 
 .status-txt span {
   color: var(--muted);
-  font-size: 10px;
+  font-size: 12px;
 }
 
 .results {
@@ -1164,7 +1159,7 @@ button:disabled {
 
 .result-grid {
   display: grid;
-  grid-template-columns: repeat(auto-fit, minmax(min(100%, 158px), 1fr));
+  grid-template-columns: repeat(auto-fit, minmax(min(100%, 140px), 1fr));
   gap: 10px;
 }
 
@@ -1392,29 +1387,18 @@ button:disabled {
   background: rgba(255, 255, 255, 0.035);
 }
 
-.composition-heading strong,
-.composition-heading span {
+.notes-label {
   display: block;
-}
-
-.composition-heading strong {
-  font-size: 13px;
-}
-
-/* the "<Map> notes" label follows the composition line, so it needs air above */
-.map-notes-label {
-  display: block;
-  margin-top: 10px;
   margin-bottom: 4px;
 }
 
-.map-reasons {
+.lineup-notes {
   display: grid;
   gap: 5px;
   margin: 0;
   padding-left: 18px;
   color: var(--muted);
-  font-size: 11px;
+  font-size: 12px;
 }
 
 .waiting-copy,
@@ -1432,7 +1416,7 @@ button:disabled {
   margin-top: 3px;
   color: var(--muted);
   font-family: var(--mono);
-  font-size: 8px;
+  font-size: 10px;
   letter-spacing: 0.06em;
   text-transform: uppercase;
 }
@@ -1478,7 +1462,7 @@ button:disabled {
 .lock-button small {
   margin-top: 4px;
   font-family: var(--mono);
-  font-size: 7px;
+  font-size: 9px;
   letter-spacing: 0.12em;
   text-transform: uppercase;
 }
@@ -1515,7 +1499,7 @@ button:disabled {
 
 .match-label {
   display: block;
-  font-size: 7px;
+  font-size: 9px;
 }
 
 .reroll-dots {
@@ -1560,19 +1544,9 @@ button:disabled {
   margin-right: auto;
   color: var(--muted);
   font-family: var(--mono);
-  font-size: 8px;
+  font-size: 9px;
   letter-spacing: 0.08em;
   text-transform: uppercase;
-}
-
-.discord-primary {
-  border-color: var(--discord);
-  background: var(--discord);
-  color: #fff;
-}
-
-.discord-primary:hover:not(:disabled) {
-  background: #8799df;
 }
 
 .discord-link {
@@ -1798,7 +1772,7 @@ footer {
   border-top: 1px solid var(--rule-hard);
   color: var(--quiet);
   font-family: var(--mono);
-  font-size: 8px;
+  font-size: 9px;
   line-height: 1.65;
 }
 
@@ -1852,7 +1826,6 @@ footer p {
 
 @media (max-width: 860px) {
   .button,
-  .discord-primary,
   .discord-link,
   .library-add,
   .icon-btn,
@@ -1867,15 +1840,11 @@ footer p {
 
 @media (max-width: 720px) {
   .app-shell {
-    width: min(100% - 24px, 1560px);
+    width: min(100% - 24px, 1480px);
   }
 
   .topbar {
     min-height: 74px;
-  }
-
-  .build-stamp span:last-child {
-    display: none;
   }
 
   .command-grid {
@@ -1936,11 +1905,7 @@ footer p {
 
 @media (max-width: 470px) {
   .app-shell {
-    width: min(100% - 20px, 1560px);
-  }
-
-  .build-stamp {
-    display: none;
+    width: min(100% - 20px, 1480px);
   }
 
   .brand-copy small {
@@ -1997,7 +1962,6 @@ footer p {
   }
 
   .share-actions > .button,
-  .share-actions > .discord-primary,
   .share-actions > .discord-link {
     flex: 1 1 100%;
   }

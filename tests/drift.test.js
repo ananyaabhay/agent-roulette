@@ -8,8 +8,8 @@ import { MAP_META } from "../data/map-meta.js";
 import { extractPatch, findDrift } from "../scripts/check-game-data.js";
 import {
   MAP_EVIDENCE_CAVEAT,
+  buildLineupNotes,
   describeMapEvidence,
-  explainMapDraft,
   observedAgentNames,
 } from "../logic/recommendations.js";
 
@@ -99,22 +99,50 @@ test("every map states its sample size in plain language", () => {
   assert.match(describeMapEvidence("lotus"), /show a real pattern/);
 });
 
-test("at zero map strength the panel says the draft ignored the map", () => {
-  const draft = [AGENTS.find((agent) => agent.id === "sova")];
-  const reasons = explainMapDraft({ mapId: "abyss", draft, mapStrength: 0 });
-  assert.match(reasons[0], /ignored this map entirely/);
-  assert.ok(reasons.every((line) => !/\d+(\.\d+)?%/.test(line)));
-  // The evidence line belongs to the Map Intel panel; repeating it here showed
-  // the same sentence twice on one screen.
-  assert.ok(reasons.every((line) => !/recorded professional matches/.test(line)));
+test("remembered maps produce zero map-result commentary outside Map Smart", () => {
+  const lineup = [AGENTS.find((agent) => agent.id === "gekko")];
+  const teamNeeds = [{ role: "Initiator", state: "needed", requiredFromStack: 1 }];
+  const balanced = buildLineupNotes({
+    structureId: "balanced",
+    mode: "balanced",
+    mapId: "haven",
+    draft: lineup,
+    mapStrength: 0,
+    teamNeeds,
+  });
+  const chaos = buildLineupNotes({
+    structureId: "chaos",
+    mode: "chaos",
+    mapId: "haven",
+    draft: lineup,
+    mapStrength: 0,
+    teamNeeds,
+  });
+  assert.match(balanced.join(" "), /Filled team need: Gekko supplied the Initiator/);
+  assert.doesNotMatch(balanced.join(" "), /Haven|map|snapshot|weight/i);
+  assert.match(chaos.join(" "), /not enforced in Total Chaos/);
+  assert.doesNotMatch(chaos.join(" "), /Haven|map|snapshot|weight/i);
 });
 
-test("at full strength the panel describes observation, not recommendation", () => {
-  const draft = [AGENTS.find((agent) => agent.id === "sova")];
-  const reasons = explainMapDraft({ mapId: "abyss", draft, mapStrength: 4 });
-  assert.match(reasons[0], /seen most often/);
-  assert.doesNotMatch(reasons.join(" "), /signal/i);
-  assert.ok(reasons.every((line) => !/recorded professional matches/.test(line)));
+test("Map Smart Notes classify map-favoured, constraint-led, and wildcard outcomes", () => {
+  const lineup = ["omen", "gekko", "chamber"].map((id) =>
+    AGENTS.find((agent) => agent.id === id),
+  );
+  const reasons = buildLineupNotes({
+    structureId: "map",
+    mode: "balanced",
+    mapId: "haven",
+    draft: lineup,
+    mapStrength: 4,
+    teamNeeds: [{ role: "Initiator", state: "needed", requiredFromStack: 1 }],
+  });
+  const text = reasons.join(" ");
+  assert.match(text, /Map-favoured: Omen/);
+  assert.match(text, /Role \/ constraint-led: Gekko/);
+  assert.match(text, /Wildcard roll: Chamber/);
+  assert.match(text, /changes probability rather than forcing meta agents/);
+  assert.doesNotMatch(text, /recommended|optimal|best possible|wrong pick|not mentioned/i);
+  assert.doesNotMatch(text, /recorded professional matches/);
 });
 
 test("the panel discloses that the source is pro play, not the ladder", () => {

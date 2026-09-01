@@ -411,7 +411,7 @@ export function explainFailure({
       .join(", ");
     return {
       title: "The known picks leave too many roles open.",
-      body: `The comp still needs ${roles}: ${totalNeeded} roles across ${players.length} stack ${players.length === 1 ? "player" : "players"}. Switch to Full Chaos or change an outside pick.`,
+      body: `The comp still needs ${roles}: ${totalNeeded} roles across ${players.length} stack ${players.length === 1 ? "player" : "players"}. Switch to Total Chaos or change an outside pick.`,
     };
   }
 
@@ -430,12 +430,12 @@ export function explainFailure({
     );
     return {
       title: `Nobody in the stack can play a ${uncoveredRole}.`,
-      body: `That role is still needed.${starter ? ` ${starter.name} is a default unlock; check whether they are marked as an outside pick.` : ""} You can also switch to Full Chaos.`,
+      body: `That role is still needed.${starter ? ` ${starter.name} is a default unlock; check whether they are marked as an outside pick.` : ""} You can also switch to Total Chaos.`,
     };
   }
 
   return {
-    title: "These agent pools cannot cover a Role Balanced draft.",
-    body: "There are enough agents, but the ownership spread cannot meet every role target without duplicates. Add ownership across roles or use Full Chaos.",
+    title: "These agent pools cannot cover a Role Balanced lineup.",
+    body: "There are enough agents, but the ownership spread cannot meet every role target without duplicates. Add ownership across roles or use Total Chaos.",
   };
 }

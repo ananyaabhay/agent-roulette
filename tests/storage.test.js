@@ -80,6 +80,21 @@ test("saved-library serialization excludes current stack and active Match state"
   ]);
 });
 
+test("remembered map survives while a non-map Roll Style is preferred", () => {
+  const serialized = serializePreferences({
+    preferredMode: "balanced",
+    preferredStructure: 1,
+    selectedMapId: "haven",
+    savedPlayers: [],
+  });
+  const normalized = normalizeSavedPreferences(serialized, {
+    agents: AGENTS,
+    validMapIds: ["haven"],
+  });
+  assert.equal(normalized.preferredStructure, 1);
+  assert.equal(normalized.selectedMapId, "haven");
+});
+
 test("removing and later re-adding a current-stack ID does not alter saved ownership", () => {
   const library = [savedPlayer("p1", "Ananya", ["omen", ...STARTER_AGENT_IDS])];
   const before = serializePreferences({

@@ -172,7 +172,7 @@ test("Role Balanced respects role maximums", () => {
   }
 });
 
-test("Full Chaos disables role targets but preserves hard constraints", () => {
+test("Total Chaos advisory needs do not affect solving or hard constraints", () => {
   const duelists = AGENTS.filter((agent) => agent.role === "Duelist").slice(0, 5);
   const setupPlayers = duelists.map((agent, index) => player(`p${index}`, [agent.id]));
   const chaosSetup = context({ players: setupPlayers, mode: "chaos" });
@@ -181,6 +181,13 @@ test("Full Chaos disables role targets but preserves hard constraints", () => {
   assert.ok(chaosDraft.every((agent) => agent.role === "Duelist"));
   assert.ok(validateDraft({ ...chaosSetup, assignment: chaosDraft }));
   assert.equal(solveDraft({ ...chaosSetup, mode: "balanced" }), null);
+  const advisoryNeeds = getTeamNeeds({ ...chaosSetup, mode: "balanced" });
+  assert.ok(advisoryNeeds.some((need) => need.state === "impossible"));
+  const afterAdvisory = solveDraft(chaosSetup);
+  assert.deepEqual(
+    afterAdvisory.map((agent) => agent.id),
+    chaosDraft.map((agent) => agent.id),
+  );
 });
 
 test("Team Needs reports only solver-backed required, covered, flexible, impossible, and disabled states", () => {

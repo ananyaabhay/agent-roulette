@@ -7,20 +7,20 @@
     <title>Agent Roulette — smart randomness for a real squad</title>
     <meta
       name="description"
-      content="Build a role-aware VALORANT squad draft around the agents your stack actually owns."
+      content="Build a role-aware VALORANT lineup around the agents your stack actually owns."
     />
     <meta property="og:type" content="website" />
     <meta property="og:url" content="https://ananyaabhay.github.io/agent-roulette/" />
     <meta property="og:title" content="Agent Roulette" />
     <meta
       property="og:description"
-      content="Smart randomness for a real squad: saved players, owned agents, role-aware drafts, and limited rerolls."
+      content="Smart randomness for a real squad: saved players, owned agents, role-aware lineups, and limited rerolls."
     />
     <meta name="twitter:card" content="summary" />
     <meta name="twitter:title" content="Agent Roulette" />
     <meta
       name="twitter:description"
-      content="Lock in a valid role-aware VALORANT squad draft in seconds."
+      content="Roll a valid role-aware VALORANT squad lineup in seconds."
     />
     <link rel="icon" href="./favicon.svg" type="image/svg+xml" />
     <link rel="preconnect" href="https://fonts.googleapis.com" />
@@ -29,8 +29,8 @@
       href="https://fonts.googleapis.com/css2?family=Big+Shoulders+Display:wght@600;700;800;900&family=IBM+Plex+Mono:wght@400;500;600&family=IBM+Plex+Sans:wght@400;500;600;700&display=swap"
       rel="stylesheet"
     />
-    <link rel="stylesheet" href="./styles.css?v=1.5.0" />
-    <script type="module" src="./app.js?v=1.5.0"></script>
+    <link rel="stylesheet" href="./styles.css?v=1.5.1" />
+    <script type="module" src="./app.js?v=1.5.1"></script>
   </head>
   <body>
     <div class="app-shell">
@@ -42,10 +42,6 @@
             <small>Smart randomness / real squads</small>
           </span>
         </a>
-        <div class="build-stamp" aria-label="Application details">
-          <span>V1.5</span>
-          <span>Local profiles</span>
-        </div>
       </header>
 
       <main class="command-grid">
@@ -72,6 +68,10 @@
             <button class="text-button" id="managePlayers" type="button">
               Manage saved players
             </button>
+            <span
+              class="device-save-note"
+              title="Saved players and owned-agent selections stay in this browser. There is no cloud account or sync."
+            >Saved on this device</span>
           </div>
 
           <section class="team-context" aria-label="Five-player team context">
@@ -93,25 +93,25 @@
             </section>
           </section>
 
-          <details class="team-needs">
-            <summary>
+          <section class="team-needs" aria-labelledby="teamNeedsTitle">
+            <div class="team-needs-head">
               <span>
                 <span class="eyebrow">Composition intel</span>
                 <strong id="teamNeedsTitle">Team needs</strong>
               </span>
               <span class="needs-signal" id="teamNeedsSignal">Add players</span>
-            </summary>
+            </div>
             <div class="team-needs-body">
               <p id="teamNeedsIntro"></p>
               <div id="teamNeeds" aria-live="polite"></div>
             </div>
-          </details>
+          </section>
         </section>
 
         <section class="draft-panel" aria-labelledby="rouletteTitle">
           <div class="draft-heading">
             <div>
-              <p class="eyebrow">Tactical draft room</p>
+              <p class="eyebrow">Squad roulette</p>
               <h2 id="rouletteTitle">Squad reveal</h2>
             </div>
             <div class="match-index">
@@ -124,8 +124,7 @@
           <div class="mode-row">
             <div class="structure-control">
               <div class="structure-head">
-                <label for="structureRange">Draft structure</label>
-                <output class="structure-value" id="structureValue" for="structureRange"></output>
+                <label for="structureRange">Roll style</label>
               </div>
               <input
                 type="range"
@@ -170,7 +169,7 @@
           <div class="results" id="results"></div>
           <div class="composition-summary" id="compositionSummary" hidden></div>
 
-          <div class="draft-actions" aria-label="Draft actions">
+          <div class="draft-actions" aria-label="Lineup actions">
             <button class="lock-button" id="roll" type="button">
               <span>Lock us in</span>
               <small>Randomise squad</small>
@@ -194,9 +193,6 @@
             <span class="share-label">Send the lineup</span>
             <button class="button button--secondary" id="copy" type="button">
               Copy result
-            </button>
-            <button class="discord-primary" id="copyOpen" type="button">
-              Copy &amp; open Discord
             </button>
             <a
               class="discord-link"
@@ -228,7 +224,7 @@
           registered trademarks of Riot Games, Inc.
         </p>
         <p>
-          Agent art comes from Riot’s Public Content Catalog. Map notes are a
+          Agent art comes from Riot’s Public Content Catalog. Map data is a
           dated snapshot of professional match data, not the ranked ladder —
           they are shown for interest, not as advice or a guarantee.
         </p>

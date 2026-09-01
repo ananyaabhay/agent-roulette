@@ -9,8 +9,11 @@ import {
   STRUCTURE_STOPS,
   resolveStructure,
 } from "../data/game-data.js";
-import { createMapCandidateWeight } from "../logic/recommendations.js";
-import { solveDraft } from "../logic/solver.js";
+import {
+  createMapCandidateWeight,
+  getMapConfidenceInfluence,
+} from "../logic/recommendations.js";
+import { solveDraft, validateDraft } from "../logic/solver.js";
 import {
   normalizeSavedPreferences,
   serializePreferences,
@@ -24,17 +27,29 @@ const stack = (count = 5) =>
     ownedAgentIds: new Set(allAgentIds),
   }));
 
+function seededRandom(seed) {
+  let value = seed >>> 0;
+  return () => {
+    value += 0x6d2b79f5;
+    let next = value;
+    next = Math.imul(next ^ (next >>> 15), next | 1);
+    next ^= next + Math.imul(next ^ (next >>> 7), next | 61);
+    return ((next ^ (next >>> 14)) >>> 0) / 4294967296;
+  };
+}
+
 /** Appearance rate and roster spread at a given map strength. */
-function sample({ mapStrength, trials = 1200 }) {
+function sample({ mapStrength, mapId = "ascent", trials = 1200 }) {
   const players = stack();
   const candidateWeight = createMapCandidateWeight({
-    mapId: "ascent",
+    mapId,
     strength: mapStrength,
   });
+  const random = seededRandom(0x51a7);
   const appearances = new Map(AGENTS.map((agent) => [agent.id, 0]));
   let solved = 0;
   for (let trial = 0; trial < trials; trial += 1) {
-    const draft = solveDraft({ players, mode: "balanced", candidateWeight });
+    const draft = solveDraft({ players, mode: "balanced", candidateWeight, random });
     if (!draft) continue;
     solved += 1;
     draft.forEach((agent) =>
@@ -82,6 +97,19 @@ test("strength 0 produces no weighting at all", () => {
   assert.equal(createMapCandidateWeight({ mapId: "ascent", strength: 0 }), null);
 });
 
+test("confidence transparently dampens configured influence toward neutral", () => {
+  assert.equal(getMapConfidenceInfluence("ascent"), 1);
+  assert.equal(getMapConfidenceInfluence("summit"), 0.75);
+  assert.equal(getMapConfidenceInfluence("abyss"), 0.45);
+  const sova = AGENTS.find((agent) => agent.id === "sova");
+  const highWeight = createMapCandidateWeight({ mapId: "ascent", strength: 4 })(sova);
+  const lowWeight = createMapCandidateWeight({ mapId: "abyss", strength: 4 })(sova);
+  assert.equal(highWeight, 1.5 ** 4);
+  assert.equal(lowWeight, 1 + (1.5 ** 4 - 1) * 0.45);
+  assert.ok(highWeight > lowWeight);
+  assert.ok(lowWeight > 1);
+});
+
 test("Map Smart visibly favours the map's leading agents", () => {
   // The V1.4 setting moved Omen from 17% to 24%, which read as inert.
   const baseline = sample({ mapStrength: 0 });
@@ -92,11 +120,16 @@ test("Map Smart visibly favours the map's leading agents", () => {
   );
 });
 
-test("Map Smart still behaves like a roulette rather than one fixed comp", () => {
-  const shipped = sample({ mapStrength: MAP_STRENGTH });
+test("high- and low-confidence Map Smart both preserve roulette variety", () => {
+  const shipped = sample({ mapStrength: MAP_STRENGTH, mapId: "ascent" });
+  const dampened = sample({ mapStrength: MAP_STRENGTH, mapId: "abyss" });
   assert.ok(
     shipped.inPlay >= 20,
     `Map Smart left only ${shipped.inPlay} agents in play`,
+  );
+  assert.ok(
+    dampened.inPlay >= 20,
+    `Low-confidence Map Smart left only ${dampened.inPlay} agents in play`,
   );
 });
 
@@ -112,9 +145,11 @@ test("weights order candidates but never make an unowned agent legal", () => {
   for (let trial = 0; trial < 200; trial += 1) {
     const draft = solveDraft({ players, mode: "balanced", candidateWeight });
     assert.ok(draft);
+    assert.equal(new Set(draft.map((agent) => agent.id)).size, draft.length);
     draft.forEach((agent, index) => {
       assert.ok(players[index].ownedAgentIds.has(agent.id));
     });
+    assert.ok(validateDraft({ assignment: draft, players, mode: "balanced" }));
   }
 });
 

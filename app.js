@@ -31,9 +31,9 @@ import {
   togglePlayerPin,
 } from "./logic/match.js";
 import {
+  buildLineupNotes,
   createMapCandidateWeight,
-  explainMapDraft,
-  getCompositionSummary,
+  getMapConfidenceInfluence,
   getMapIntel,
   MAP_EVIDENCE_CAVEAT,
   describeMapEvidence,
@@ -55,7 +55,6 @@ const LEGACY_PREFERENCES_KEYS = [
 ];
 const SESSION_KEY = "agent-roulette:match-session:v2";
 const LEGACY_SESSION_KEY = "agent-roulette:match-session:v1";
-const DISCORD_URL = "https://discord.com/channels/@me";
 const MAX_SAVED_PLAYERS = 50;
 const MAX_NAME_LENGTH = 60;
 const reducedMotion = window.matchMedia(
@@ -317,7 +316,7 @@ function changeStack(mutation, description) {
   if (hadActiveMatch) {
     showNote(
       `Match ${matchState.matchNumber} is ready.`,
-      "The previous draft and pins were cleared because the current stack changed. Personal rerolls and team redraws are full.",
+      "The previous lineup and pins were cleared because the current stack changed. Personal rerolls and team redraws are full.",
       true,
     );
   }
@@ -338,7 +337,7 @@ function applyReconcilableChange({
     renderAll();
     showNote(
       "That change cannot produce a valid Match.",
-      `${description} was not applied. Adjust another ownership setting, outside pick, or use Full Chaos first.`,
+      `${description} was not applied. Adjust another ownership setting, outside pick, or use Total Chaos first.`,
     );
     return false;
   }
@@ -346,7 +345,7 @@ function applyReconcilableChange({
   if (
     result.reason === "resolved" &&
     !window.confirm(
-      `${description} conflicts with the active draft. Agent Roulette can rebuild a valid draft without spending a reroll. Continue?`,
+      `${description} conflicts with the current lineup. Agent Roulette can rebuild a valid lineup without spending a reroll. Continue?`,
     )
   ) {
     rollback();
@@ -365,7 +364,7 @@ function applyReconcilableChange({
       : " Existing pins were preserved.";
     showNote(
       "Active Match resolved.",
-      `The draft was rebuilt around the updated setup. No reroll was spent.${releasedText}`,
+      `The lineup was rebuilt around the updated setup. No reroll was spent.${releasedText}`,
       true,
     );
   }
@@ -973,33 +972,32 @@ function renderTeamNeeds() {
     return;
   }
 
-  const needs = getTeamNeeds(currentContext());
-  if (mode === "chaos") {
-    $("#teamNeedsIntro").textContent =
-      "Full Chaos disables role targets. Ownership, outside picks, and distinct agents still apply.";
-    signal.textContent = "Targets off";
-    teamNeedsElement.append(
-      element("div", "needs-summary chaos", "Role targets are disabled for this Match."),
-    );
-    return;
-  }
-
+  const advisory = mode === "chaos";
+  const needs = getTeamNeeds({
+    ...currentContext(),
+    mode: advisory ? "balanced" : mode,
+  });
   const unknownOutsideSeats = MAX_TEAM_SIZE - players.length - takenAgentIds.size;
-  $("#teamNeedsIntro").textContent =
-    "What the current role targets still require, using the exact same quotas as the solver.";
   const summary = element("div", "needs-summary");
   const required = needs.filter((need) =>
     ["needed", "impossible"].includes(need.state),
   );
-  signal.textContent = required.length
-    ? required.map((need) => need.role).join(" + ")
-    : "Covered";
   const covered = needs
     .flatMap((need) => need.coveringLobbyAgents.map((agent) => `${agent.name} · ${need.role}`));
+  signal.textContent = advisory
+    ? "Reference only"
+    : required.length
+      ? required.map((need) => need.role).join(" + ")
+      : "Covered";
+  $("#teamNeedsIntro").textContent = advisory
+    ? "Reference only — not enforced in Chaos. Ownership, outside picks, and distinct agents are still enforced."
+    : "Uses the same role quotas as the solver.";
   summary.append(
     summaryRow(
-      "Your stack must cover",
-      required.length ? required.map((need) => need.role).join(" · ") : "No required roles remain",
+      advisory ? "Role Balanced would want" : "Needs from your stack",
+      required.length
+        ? required.map((need) => need.role).join(advisory ? " + " : " · ")
+        : "No required roles remain",
     ),
   );
   if (covered.length) {
@@ -1012,31 +1010,22 @@ function renderTeamNeeds() {
     ),
   );
   teamNeedsElement.append(summary);
+  if (advisory) return;
 
-  needs.forEach((need) => {
+  needs.filter((need) => need.state === "impossible").forEach((need) => {
     const row = element("div", `need-row ${need.state}`);
     const role = element("span", "need-role", need.role);
     role.style.color = `var(${ROLE_CSS_VARIABLES[need.role]})`;
     row.append(role);
     const state = element("span", "need-state");
-    let title = "Flexible";
-    let detail = "Not required by the current role targets.";
-
-    if (need.state === "covered") {
-      title = `Covered by ${need.coveringLobbyAgents.map((agent) => agent.name).join(", ")}`;
-      detail = "This known outside pick satisfies the current target.";
-    } else if (need.state === "needed") {
-      title = "Needed from your stack";
-      detail = need.requiredFromStack > 1
-        ? `Your stack must assign ${need.requiredFromStack} ${need.role}s.`
-        : `Your stack must assign a ${need.role}.`;
-    } else if (need.state === "impossible") {
-      title = "Missing from current ownership";
-      detail = `The target requires ${need.role}, but the current owned pools cannot supply it.`;
-    }
-
-    state.append(element("strong", "", title));
-    state.append(element("span", "", detail));
+    state.append(element("strong", "", "Missing from current ownership"));
+    state.append(
+      element(
+        "span",
+        "",
+        `The target requires ${need.role}, but the current owned pools cannot supply it.`,
+      ),
+    );
     row.append(state);
     teamNeedsElement.append(row);
   });
@@ -1054,7 +1043,6 @@ function renderMode() {
   const range = $("#structureRange");
   if (Number(range.value) !== stop.position) range.value = String(stop.position);
   range.setAttribute("aria-valuetext", stop.label);
-  $("#structureValue").textContent = stop.label;
   $("#modeDescription").textContent =
     stop.id === "map" && !selectedMapId
       ? "Choose a map below — without one, Map Smart behaves exactly like Role Balanced."
@@ -1111,9 +1099,7 @@ function renderMapIntel() {
     element(
       "p",
       "map-note",
-      resolveStructure(structurePosition).mapStrength > 0
-        ? "Map Smart reorders the legal options using this. It never makes an agent legal or illegal, and every map is weighted the same regardless of sample size."
-        : "This is not affecting your draft at the current structure setting.",
+      `Map Smart applies ${Math.round(getMapConfidenceInfluence(selectedMapId) * 100)}% of the configured influence for this ${intel.confidence}-confidence snapshot. It only reorders legal options; it never changes ownership, uniqueness, or role rules.`,
     ),
   );
   const source = element("p", "map-source");
@@ -1132,13 +1118,14 @@ function checkFeasibility() {
   // A map is optional at every slider position now, so it can never block a spin.
   feasible = players.length > 0 && Boolean(solveDraft(currentContext()));
   const status = $("#status");
-  status.classList.toggle("bad", !feasible);
+  status.classList.toggle("bad", players.length > 0 && !feasible);
+  status.classList.toggle("status--quiet", feasible);
 
   if (players.length === 0) {
     $("#statusTitle").textContent = "Squad waiting.";
     $("#statusBody").textContent = "Add at least one player to begin.";
   } else if (feasible && matchState.draft) {
-    $("#statusTitle").textContent = "Squad locked.";
+    $("#statusTitle").textContent = "Lineup locked in.";
     $("#statusBody").textContent = "Pin a favourite, use a personal reroll, or spend a team redraw.";
   } else if (feasible) {
     $("#statusTitle").textContent = "Ready to lock in.";
@@ -1162,7 +1149,6 @@ function checkFeasibility() {
     !matchState.draft || matchState.teamRedrawsRemaining <= 0 || !feasible;
   $("#newMatch").disabled = !matchState.draft;
   $("#copy").disabled = !matchState.draft;
-  $("#copyOpen").disabled = !matchState.draft;
   $(".share-actions").hidden = !matchState.draft;
   // The badge previously only knew whether a draft existed, so it read "Ready"
   // with zero players and "Ready" when no legal comp was possible.
@@ -1227,7 +1213,7 @@ function renderResults(assignment, options = {}) {
       const empty = element("div", "draft-empty");
       empty.append(element("span", "draft-reticle", "+"));
       empty.append(element("strong", "", "Your squad reveal starts here"));
-      empty.append(element("span", "", "Add players, then lock in the draft."));
+      empty.append(element("span", "", "Add players, then roll the lineup."));
       resultsElement.append(empty);
       return;
     }
@@ -1324,35 +1310,22 @@ function scrambleResult(row, finalAgent, duration) {
 
 function renderCompositionSummary(assignment) {
   const container = $("#compositionSummary");
-  const composition = getCompositionSummary({
+  const stop = resolveStructure(structurePosition);
+  const reasons = buildLineupNotes({
+    structureId: stop.id,
+    mode,
+    mapId: selectedMapId,
     draft: assignment,
     takenAgentIds,
     agents: AGENTS,
+    mapStrength: stop.mapStrength,
+    teamNeeds: getTeamNeeds({ ...currentContext(), mode: "balanced" }),
   });
-  const heading = element("div", "composition-heading");
-  heading.append(
-    element("span", "eyebrow", "Accounted team"),
-    element("strong", "", composition.text),
-  );
-  container.append(heading);
-
-  if (selectedMapId) {
-    const intelMapName = MAP_BY_ID.get(selectedMapId)?.name || "Map";
-    const reasons = explainMapDraft({
-      mapId: selectedMapId,
-      draft: assignment,
-      takenAgentIds,
-      agents: AGENTS,
-      mapStrength: resolveStructure(structurePosition).mapStrength,
-    });
-    if (reasons.length) {
-      container.append(
-        element("span", "eyebrow map-notes-label", `${intelMapName} notes`),
-      );
-      const list = element("ul", "map-reasons");
-      reasons.forEach((reason) => list.append(element("li", "", reason)));
-      container.append(list);
-    }
+  if (reasons.length) {
+    container.append(element("span", "eyebrow notes-label", "Notes"));
+    const list = element("ul", "lineup-notes");
+    reasons.forEach((reason) => list.append(element("li", "", reason)));
+    container.append(list);
   }
   container.hidden = false;
 }
@@ -1503,7 +1476,7 @@ $("#redraw").addEventListener("click", () => {
     };
     const [title, body] = messages[result.reason] || [
       "Nothing to redraw.",
-      "Spin a draft first.",
+      "Generate a lineup first.",
     ];
     showNote(title, body);
     return;
@@ -1530,40 +1503,30 @@ $("#newMatch").addEventListener("click", () => {
   checkFeasibility();
   showNote(
     `Match ${matchState.matchNumber} is ready.`,
-    "The previous draft and pins were cleared. Every player has three rerolls and the team has three redraws.",
+    "The previous lineup and pins were cleared. Every player has three rerolls and the team has three redraws.",
     true,
   );
 });
 
-async function copyResult(openDiscord) {
+async function copyResult() {
   if (!matchState.draft) {
-    showNote("Nothing to copy yet.", "Spin the initial draft first.");
+    showNote("Nothing to copy yet.", "Generate a lineup first.");
     return;
   }
   const text = discordText();
   try {
     await navigator.clipboard.writeText(text);
     showNote(
-      openDiscord ? "Result copied — opening Discord." : "Result copied.",
-      "Choose the conversation and paste it yourself. Agent Roulette does not post automatically.",
+      "Copied.",
+      "Open Discord and paste it into your chat.",
       true,
     );
-    if (openDiscord) {
-      const opened = window.open(DISCORD_URL, "_blank", "noopener,noreferrer");
-      if (!opened) {
-        showNote(
-          "Result copied, but Discord was blocked.",
-          "Use the separate Open Discord link, then paste the copied result yourself.",
-        );
-      }
-    }
   } catch (error) {
     showCopyFallback(text);
   }
 }
 
-$("#copy").addEventListener("click", () => copyResult(false));
-$("#copyOpen").addEventListener("click", () => copyResult(true));
+$("#copy").addEventListener("click", copyResult);
 $("#addPlayer").addEventListener("click", () => {
   openPlayerLibrary("choose");
 });
@@ -1579,15 +1542,11 @@ function setStructure(nextPosition) {
   const next = resolveStructure(nextPosition);
   if (next.position === structurePosition) return;
   const hadActiveMatch = Boolean(matchState.draft);
-  const changesLegality = next.mode !== mode;
 
-  // Sliding within Role Balanced only reweights preference, so an active Match
-  // survives it. Crossing the Chaos boundary changes what is legal, so it can't.
   if (
     hadActiveMatch &&
-    changesLegality &&
     !window.confirm(
-      `Moving to ${next.label} changes which drafts are legal and will start a new Match. Continue?`,
+      `Changing Roll Style to ${next.label} will start a new Match and clear the current lineup. Continue?`,
     )
   ) {
     renderMode();
@@ -1597,27 +1556,36 @@ function setStructure(nextPosition) {
   structurePosition = next.position;
   mode = next.mode;
   preferredMode = next.mode;
-  if (hadActiveMatch && changesLegality) {
+  if (hadActiveMatch) {
     matchState = startNewMatch(matchState, currentStackIds);
   }
   savePreferences();
   saveSession();
   renderAll();
-  if (hadActiveMatch && changesLegality) {
+  if (hadActiveMatch) {
     showNote(
       `Match ${matchState.matchNumber} is ready in ${next.label}.`,
-      "The previous draft and pins were cleared. All personal rerolls and team redraws are full.",
+      "The previous lineup and pins were cleared. All personal rerolls and team redraws are full.",
       true,
     );
   }
 }
 
-// input = update the label as the thumb snaps; change = commit the stop.
-$("#structureRange").addEventListener("input", (event) => {
-  $("#structureValue").textContent = resolveStructure(event.target.value).label;
-});
 $("#structureRange").addEventListener("change", (event) => {
   setStructure(event.target.value);
+});
+$("#structureRange").addEventListener("keydown", (event) => {
+  const keyPositions = {
+    ArrowLeft: structurePosition - 1,
+    ArrowDown: structurePosition - 1,
+    ArrowRight: structurePosition + 1,
+    ArrowUp: structurePosition + 1,
+    Home: 0,
+    End: STRUCTURE_MAX,
+  };
+  if (!(event.key in keyPositions)) return;
+  event.preventDefault();
+  setStructure(keyPositions[event.key]);
 });
 $("#mapSelect").addEventListener("change", (event) => {
   const nextMapId = event.target.value;
@@ -1626,7 +1594,7 @@ $("#mapSelect").addEventListener("change", (event) => {
   if (
     hadActiveMatch &&
     !window.confirm(
-      `Changing the map to ${MAP_BY_ID.get(nextMapId)?.name || "no map"} changes Map Smart recommendations and will start a new Match. Continue?`,
+      `Changing the map to ${MAP_BY_ID.get(nextMapId)?.name || "no map"} will start a new Match and clear the current lineup. Continue?`,
     )
   ) {
     event.target.value = selectedMapId;
@@ -1642,7 +1610,7 @@ $("#mapSelect").addEventListener("change", (event) => {
   if (hadActiveMatch) {
     showNote(
       `Match ${matchState.matchNumber} is ready for ${MAP_BY_ID.get(selectedMapId)?.name || "Map Smart"}.`,
-      "The previous draft and pins were cleared. All personal rerolls and team redraws are full.",
+      "The previous lineup and pins were cleared. All personal rerolls and team redraws are full.",
       true,
     );
   }
@@ -1659,7 +1627,7 @@ if (storageRecoveryNotice) {
 } else if (matchState.draft) {
   showNote(
     `Match ${matchState.matchNumber} restored.`,
-    `The draft, pins, outside picks, personal rerolls, and ${matchState.teamRedrawsRemaining} team redraws survived the refresh.`,
+    `The lineup, pins, outside picks, personal rerolls, and ${matchState.teamRedrawsRemaining} team redraws survived the refresh.`,
     true,
   );
 }

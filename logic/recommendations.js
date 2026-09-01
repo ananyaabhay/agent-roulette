@@ -7,6 +7,17 @@ import {
   MAP_META_VERSION,
 } from "../data/map-meta.js";
 
+/**
+ * Confidence scales recommendation influence toward neutral without changing
+ * the configured map data. High-confidence snapshots keep the full weight,
+ * medium snapshots keep 75%, and low snapshots keep 45%.
+ */
+export const MAP_CONFIDENCE_INFLUENCE = Object.freeze({
+  high: 1,
+  medium: 0.75,
+  low: 0.45,
+});
+
 export function getMapIntel(mapId) {
   const map = MAP_BY_ID.get(mapId);
   const meta = MAP_META[mapId];
@@ -20,8 +31,14 @@ export function getMapIntel(mapId) {
   };
 }
 
+export function getMapConfidenceInfluence(mapId) {
+  const confidence = MAP_META[mapId]?.confidence;
+  return MAP_CONFIDENCE_INFLUENCE[confidence] ?? 0;
+}
+
 /**
- * Map influence is an exponent, not a fixed table: w' = w ** strength.
+ * Map influence begins with an exponent, then confidence blends it toward
+ * neutral: w' = 1 + ((w ** strength) - 1) * confidenceInfluence.
  * strength 0 collapses every weight to 1 (pure legal randomness), 1 is the
  * historical V1.4 behaviour, and MAP_STRENGTH_MAX is the point past which the
  * draft stops being a roulette. Measured on Ascent over 4,000 five-stacks:
@@ -36,6 +53,7 @@ export function createMapCandidateWeight({
 }) {
   const meta = MAP_META[mapId];
   if (!meta || strength <= 0) return null;
+  const confidenceInfluence = getMapConfidenceInfluence(mapId);
   const byId = new Map(agents.map((agent) => [agent.id, agent]));
   const outsideRoleCounts = Object.fromEntries(ROLES.map((role) => [role, 0]));
   takenAgentIds.forEach((agentId) => {
@@ -44,13 +62,13 @@ export function createMapCandidateWeight({
   });
 
   return (agent, { roleCounts = {} } = {}) => {
-    let weight = (meta.agentWeights[agent.id] || 1) ** strength;
+    let configuredWeight = (meta.agentWeights[agent.id] || 1) ** strength;
     const accountedRoleCount =
       (roleCounts[agent.role] || 0) + outsideRoleCounts[agent.role];
     if (accountedRoleCount === 1 && meta.rolePairWeights[agent.role]) {
-      weight *= meta.rolePairWeights[agent.role] ** strength;
+      configuredWeight *= meta.rolePairWeights[agent.role] ** strength;
     }
-    return weight;
+    return 1 + (configuredWeight - 1) * confidenceInfluence;
   };
 }
 
@@ -67,52 +85,112 @@ export function getCompositionSummary({ draft = [], takenAgentIds = new Set(), a
   };
 }
 
-export function explainMapDraft({
-  mapId,
+function formatAgentNames(agents) {
+  return agents.map((agent) => agent.name).join(", ");
+}
+
+function filledNeedNote(draft, teamNeeds) {
+  const filled = teamNeeds
+    .filter((need) => need.state === "needed" && need.requiredFromStack > 0)
+    .map((need) => ({
+      need,
+      agents: draft
+        .filter((agent) => agent.role === need.role)
+        .slice(0, need.requiredFromStack),
+    }))
+    .filter(({ need, agents }) => agents.length >= need.requiredFromStack);
+
+  if (!filled.length) return "";
+  if (filled.length === 1) {
+    const [{ need, agents }] = filled;
+    return `Filled team need: ${formatAgentNames(agents)} supplied the ${need.role} highlighted before the roll.`;
+  }
+  return `Filled team needs: ${filled
+    .map(({ need, agents }) => `${formatAgentNames(agents)} supplied ${need.role}`)
+    .join("; ")}.`;
+}
+
+/**
+ * Build the single post-roll Notes list. Map data is intentionally ignored
+ * unless the active stop is Map Smart, even when a remembered map is present.
+ */
+export function buildLineupNotes({
+  structureId = "balanced",
+  mode = "balanced",
+  mapId = "",
   draft,
   takenAgentIds = new Set(),
   agents = AGENTS,
   mapStrength = 0,
+  teamNeeds = [],
 }) {
-  const intel = getMapIntel(mapId);
-  if (!intel || !draft?.length) return [];
-  // At Role Balanced the map data touched nothing, so the panel must not imply
-  // it did. Saying "these were chosen because of the map" when the weight was
-  // zero is the single most misleading thing this screen could do.
-  if (mapStrength <= 0) {
+  if (!draft?.length) return [];
+  const composition = getCompositionSummary({ draft, takenAgentIds, agents });
+  if (mode === "chaos") {
     return [
-      "Your draft ignored this map entirely — Role Balanced applies no map influence.",
+      `Reference only — role recommendations were not enforced in Total Chaos. Generated lineup: ${composition.text}.`,
     ];
   }
-  const byId = new Map(agents.map((agent) => [agent.id, agent]));
-  const highlighted = draft
-    .filter((agent) => (intel.agentWeights[agent.id] || 1) > 1)
-    .sort(
-      (left, right) =>
-        intel.agentWeights[right.id] - intel.agentWeights[left.id] ||
-        left.name.localeCompare(right.name),
-    )
-    .slice(0, 3);
-  const reasons = [];
 
-  if (highlighted.length) {
+  const reasons = [`Team comp: ${composition.text}.`];
+  const needNote = filledNeedNote(draft, teamNeeds);
+  if (needNote) reasons.push(needNote);
+
+  if (structureId !== "map" || mapStrength <= 0 || !mapId) return reasons;
+  const intel = getMapIntel(mapId);
+  if (!intel) return reasons;
+
+  const candidateWeight = createMapCandidateWeight({
+    mapId,
+    takenAgentIds,
+    agents,
+    strength: mapStrength,
+  });
+  const remainingNeededByRole = new Map(
+    teamNeeds
+      .filter((need) => need.state === "needed" && need.requiredFromStack > 0)
+      .map((need) => [need.role, need.requiredFromStack]),
+  );
+  const roleCounts = Object.fromEntries(ROLES.map((role) => [role, 0]));
+  const categories = { favoured: [], constrained: [], wildcard: [] };
+  draft.forEach((agent) => {
+    const weight = candidateWeight?.(agent, { roleCounts }) || 1;
+    const fillsRequiredSlot = (remainingNeededByRole.get(agent.role) || 0) > 0;
+    if (fillsRequiredSlot) {
+      remainingNeededByRole.set(
+        agent.role,
+        remainingNeededByRole.get(agent.role) - 1,
+      );
+    }
+    if (weight >= 1.25) categories.favoured.push(agent);
+    else if (fillsRequiredSlot) categories.constrained.push(agent);
+    else categories.wildcard.push(agent);
+    roleCounts[agent.role] += 1;
+  });
+
+  if (categories.favoured.length) {
     reasons.push(
-      `${highlighted.map((agent) => agent.name).join(", ")} ${highlighted.length === 1 ? "is" : "are"} among the agents seen most often on ${intel.map.name} in our snapshot.`,
+      `Map-favoured: ${formatAgentNames(categories.favoured)} received meaningful positive ${intel.map.name} weight.`,
     );
-  } else {
+  }
+  if (categories.constrained.length) {
     reasons.push(
-      `Nobody in this squad is a frequent ${intel.map.name} pick in our snapshot. That is not a problem — it just means the draft landed elsewhere.`,
+      `Role / constraint-led: ${formatAgentNames(categories.constrained)} helped satisfy required role coverage.`,
+    );
+  }
+  if (categories.wildcard.length) {
+    reasons.push(
+      `Wildcard roll: ${formatAgentNames(categories.wildcard)} ${categories.wildcard.length === 1 ? "was" : "were"} ${categories.wildcard.length === 1 ? "a legal random result" : "legal random results"} outside ${intel.map.name}’s stronger observed signals. Map Smart changes probability rather than forcing meta agents.`,
     );
   }
 
-  const composition = getCompositionSummary({ draft, takenAgentIds, agents });
   const supportedRepeatedRole = ROLES.find(
     (role) =>
       composition.counts[role] === 2 && Boolean(intel.rolePairWeights[role]),
   );
   if (supportedRepeatedRole) {
     reasons.push(
-      `The two-${supportedRepeatedRole} shape is intentional on ${intel.map.name}; the map model boosts that repeat without requiring it.`,
+      `Weighted shape: ${intel.map.name} gives a light boost to a second ${supportedRepeatedRole}; it is never required.`,
     );
   }
 
@@ -147,9 +225,8 @@ export const MAP_EVIDENCE_CAVEAT =
   "This is professional play, not the ranked ladder — coordinated teams pick very differently from a normal lobby.";
 
 /**
- * Plain-language disclosure of how much data sits behind a map. Confidence is
- * never applied to the weighting — every map is treated identically by the
- * solver — so this exists purely to let the reader discount what they see.
+ * Plain-language disclosure of how much data sits behind a map. The same
+ * confidence band also sets the transparent Map Smart influence multiplier.
  */
 export function describeMapEvidence(mapId) {
   const intel = getMapIntel(mapId);
