@@ -3,13 +3,20 @@ import test from "node:test";
 import assert from "node:assert/strict";
 import { readFile } from "node:fs/promises";
 
-import { AGENTS } from "../data/game-data.js";
+import {
+  AGENTS,
+  GAME_IDENTITY_VALIDATED_PATCH,
+} from "../data/game-data.js";
 import { MAP_META } from "../data/map-meta.js";
 import {
   analyzeDataHealth,
   decideIssueAction,
   extractPatch,
 } from "../scripts/check-game-data.js";
+import {
+  buildMaintenanceReview,
+  createIdentityValidationPatch,
+} from "../scripts/prepare-data-maintenance.js";
 import {
   MAP_EVIDENCE_CAVEAT,
   buildLineupNotes,
@@ -18,6 +25,20 @@ import {
 } from "../logic/recommendations.js";
 
 const currentAgents = AGENTS.map((agent) => ({ displayName: agent.name }));
+const currentIdentityAgents = AGENTS.map((agent, index) => ({
+  displayName: agent.name,
+  isBaseContent: agent.starter,
+  role: { displayName: agent.role },
+  uuid: `00000000-0000-0000-0000-${String(index).padStart(12, "0")}`,
+}));
+const gameDataSource = [
+  'export const GAME_DATA_VERSION = "13.04-2026-08-31";',
+  "",
+  "// Roster, role, and starter identity only; this does not imply that Map Smart",
+  "// statistics or the Competitive map rotation were refreshed.",
+  `export const GAME_IDENTITY_VALIDATED_PATCH = "${GAME_IDENTITY_VALIDATED_PATCH}";`,
+  "",
+].join("\n");
 const healthyCheck = (overrides = {}) =>
   analyzeDataHealth({
     upstreamPatch: "13.04",
@@ -26,6 +47,20 @@ const healthyCheck = (overrides = {}) =>
     mapMeta: {},
     snapshotVersion: "13.04-2026-08-31",
     snapshotUpdatedAt: "2026-08-31",
+    ...overrides,
+  });
+const maintenanceReview = (overrides = {}) =>
+  buildMaintenanceReview({
+    upstreamPatch: "13.05",
+    upstreamAgents: currentIdentityAgents,
+    now: "2026-09-10T12:00:00Z",
+    mapMeta: {},
+    snapshotVersion: "13.04-2026-08-31",
+    snapshotUpdatedAt: "2026-08-31",
+    mapPoolVersion: "13.04",
+    gameDataVersion: "13.04-2026-08-31",
+    identityValidatedPatch: "13.05",
+    gameDataSource,
     ...overrides,
   });
 
@@ -140,6 +175,127 @@ test("workflow stays weekly on Wednesday and keeps manual dispatch", async () =>
   assert.match(workflow, /cron: "0 6 \* \* 3"/);
   assert.match(workflow, /workflow_dispatch:/);
   assert.doesNotMatch(workflow, /valorant-api\.com\/v1\/maps/);
+});
+
+test("13.05 with an unchanged roster produces no fake gameplay update", () => {
+  const review = maintenanceReview();
+  assert.equal(review.patch, null);
+  assert.match(review.report, /Patch 13\.05 review/);
+  assert.match(review.report, /✓ Agent roster unchanged/);
+  assert.match(review.report, /✓ Agent roles unchanged/);
+  assert.match(review.report, /✓ Competitive map rotation unchanged/);
+  assert.match(review.report, /✓ No Map Smart refresh applied/);
+  assert.match(review.report, /No gameplay-data change required/);
+  assert.match(
+    review.report,
+    /GAME_DATA_VERSION remains 13\.04-2026-08-31/,
+  );
+});
+
+test("a live patch newer than Map Smart remains a statistics review", () => {
+  const review = maintenanceReview({
+    upstreamPatch: "13.06",
+    identityValidatedPatch: "13.06",
+  });
+  assert.match(review.report, /Snapshot patch: 13\.04/);
+  assert.match(review.report, /Statistical snapshot has not been refreshed/);
+  assert.match(
+    review.report,
+    /Competitive map rotation requires human verification/,
+  );
+  assert.match(review.report, /Professional map statistics require review/);
+});
+
+test("new upstream agents include structured identity and artwork review", () => {
+  const review = maintenanceReview({
+    upstreamAgents: [
+      ...currentIdentityAgents,
+      {
+        displayName: "Agent Thirty",
+        isBaseContent: false,
+        role: { displayName: "Initiator" },
+        uuid: "12345678-1234-1234-1234-123456789abc",
+      },
+    ],
+  });
+  assert.equal(review.roster.additions.length, 1);
+  assert.match(review.report, /New upstream agent detected: Agent Thirty/);
+  assert.match(review.report, /12345678-1234-1234-1234-123456789abc/);
+  assert.match(review.report, /Role: Initiator/);
+  assert.match(review.report, /Agent art still needs review\/import/);
+});
+
+test("unchanged agents include matching roles and starter configuration", () => {
+  const review = maintenanceReview();
+  assert.equal(review.identityMatches, true);
+  assert.deepEqual(review.roster.additions, []);
+  assert.deepEqual(review.roster.removals, []);
+  assert.deepEqual(review.roster.roleDifferences, []);
+  assert.deepEqual(review.roster.starterDifferences, []);
+  assert.match(review.report, /✓ 29 agents match/);
+  assert.match(review.report, /✓ Starter configuration matches/);
+});
+
+test("stale Map Smart data reports age and existing low-confidence samples", () => {
+  const review = maintenanceReview({
+    mapMeta: MAP_META,
+    now: "2026-09-14T00:00:00Z",
+  });
+  assert.equal(review.health.snapshotStale, true);
+  assert.match(review.report, /Age: 14 days/);
+  assert.match(review.report, /Snapshot is at least 14 days old/);
+  assert.match(review.report, /Abyss: 26 professional matches/);
+});
+
+test("unsafe identity drift produces report only and no patch", () => {
+  const review = maintenanceReview({
+    upstreamPatch: "13.06",
+    upstreamAgents: currentIdentityAgents.slice(1),
+  });
+  assert.equal(review.patch, null);
+  assert.match(review.report, /Local agent absent upstream/);
+  assert.match(review.report, /No product-data changes can be safely generated/);
+});
+
+test("a safe identity-validation change produces a normal git patch", () => {
+  const review = maintenanceReview({ upstreamPatch: "13.06" });
+  assert.equal(
+    review.patch,
+    createIdentityValidationPatch(gameDataSource, "13.06"),
+  );
+  assert.match(review.patch, /^diff --git a\/data\/game-data\.js/m);
+  assert.match(
+    review.patch,
+    /-export const GAME_IDENTITY_VALIDATED_PATCH = "13\.05";/,
+  );
+  assert.match(
+    review.patch,
+    /\+export const GAME_IDENTITY_VALIDATED_PATCH = "13\.06";/,
+  );
+  assert.doesNotMatch(review.patch, /MAP_META|agentWeights/);
+});
+
+test("maintenance workflow uploads review artifacts without remote writes", async () => {
+  const [workflow, script] = await Promise.all([
+    readFile(
+      new URL(
+        "../.github/workflows/prepare-data-maintenance.yml",
+        import.meta.url,
+      ),
+      "utf8",
+    ),
+    readFile(
+      new URL("../scripts/prepare-data-maintenance.js", import.meta.url),
+      "utf8",
+    ),
+  ]);
+  const automation = `${workflow}\n${script}`;
+  assert.match(workflow, /name: Prepare data maintenance/);
+  assert.match(workflow, /workflow_dispatch:/);
+  assert.doesNotMatch(workflow, /workflow_run:/);
+  assert.match(workflow, /agent-roulette-maintenance-review/);
+  assert.match(workflow, /maintenance-output\/\*/);
+  assert.doesNotMatch(automation, /git\s+(?:commit|push)|gh\s+pr\s+create/);
 });
 
 test("observed agents come back as ordered names with no numbers", () => {

@@ -1,0 +1,30 @@
+name: Prepare data maintenance
+
+on:
+  workflow_dispatch:
+
+permissions:
+  contents: read
+
+jobs:
+  prepare:
+    runs-on: ubuntu-latest
+    steps:
+      - name: Check out repository
+        uses: actions/checkout@v4
+
+      - name: Use Node.js 22
+        uses: actions/setup-node@v4
+        with:
+          node-version: 22
+
+      - name: Prepare review-only maintenance output
+        run: node scripts/prepare-data-maintenance.js --output-dir maintenance-output
+
+      - name: Upload maintenance review
+        if: always()
+        uses: actions/upload-artifact@v4
+        with:
+          name: agent-roulette-maintenance-review
+          path: maintenance-output/*
+          if-no-files-found: error

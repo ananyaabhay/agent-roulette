@@ -6,6 +6,10 @@
  */
 export const GAME_DATA_VERSION = "13.04-2026-08-31";
 
+// Roster, role, and starter identity only; this does not imply that Map Smart
+// statistics or the Competitive map rotation were refreshed.
+export const GAME_IDENTITY_VALIDATED_PATCH = "13.05";
+
 export const MAX_TEAM_SIZE = 5;
 export const REROLL_BUDGET = 3;
 

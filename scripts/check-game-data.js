@@ -23,7 +23,7 @@ const DAY_IN_MS = 24 * 60 * 60 * 1000;
 export const SNAPSHOT_REVIEW_DAYS = 14;
 export const MANAGED_ISSUE_MARKER = "<!-- agent-roulette-data-health -->";
 
-const normalize = (value) =>
+export const normalizeAgentName = (value) =>
   String(value || "").toLowerCase().replace(/[^a-z0-9]/g, "");
 
 async function getJson(url) {
@@ -31,6 +31,17 @@ async function getJson(url) {
   if (!response.ok) throw new Error(`${url} responded ${response.status}`);
   const payload = await response.json();
   return payload.data;
+}
+
+export async function fetchLiveGameData() {
+  const [version, upstreamAgents] = await Promise.all([
+    getJson(VERSION_URL),
+    getJson(AGENTS_URL),
+  ]);
+  return {
+    upstreamPatch: version.branch || version.riotClientVersion,
+    upstreamAgents,
+  };
 }
 
 /** Pull "13.04" out of whatever shape the upstream version string takes. */
@@ -46,6 +57,77 @@ function mapName(mapId) {
 
 function dayLabel(days) {
   return `${days} ${days === 1 ? "day" : "days"}`;
+}
+
+export function compareAgentRoster({
+  upstreamAgents = [],
+  localAgents = AGENTS,
+}) {
+  const localByName = new Map(
+    localAgents.map((agent) => [normalizeAgentName(agent.name), agent]),
+  );
+  const upstreamByName = new Map(
+    upstreamAgents
+      .filter((agent) => agent.displayName)
+      .map((agent) => [normalizeAgentName(agent.displayName), agent]),
+  );
+  const additions = [...upstreamByName]
+    .filter(([key]) => !localByName.has(key))
+    .map(([, agent]) => ({
+      displayName: agent.displayName,
+      role: agent.role?.displayName || null,
+      uuid: agent.uuid || null,
+    }));
+  const removals = [...localByName]
+    .filter(([key]) => !upstreamByName.has(key))
+    .map(([, agent]) => ({ name: agent.name, role: agent.role }));
+  const matches = [...upstreamByName]
+    .filter(([key]) => localByName.has(key))
+    .map(([key, upstream]) => ({ local: localByName.get(key), upstream }));
+  const renamedAgents = matches
+    .filter(({ local, upstream }) => local.name !== upstream.displayName)
+    .map(({ local, upstream }) => ({
+      localName: local.name,
+      upstreamName: upstream.displayName,
+    }));
+  const roleDifferences = matches
+    .filter(
+      ({ local, upstream }) =>
+        upstream.role?.displayName && local.role !== upstream.role.displayName,
+    )
+    .map(({ local, upstream }) => ({
+      name: local.name,
+      localRole: local.role,
+      upstreamRole: upstream.role.displayName,
+    }));
+  const starterDifferences = matches
+    .filter(
+      ({ local, upstream }) =>
+        typeof upstream.isBaseContent === "boolean" &&
+        local.starter !== upstream.isBaseContent,
+    )
+    .map(({ local, upstream }) => ({
+      name: local.name,
+      localStarter: local.starter,
+      upstreamStarter: upstream.isBaseContent,
+    }));
+
+  return {
+    additions,
+    removals,
+    renamedAgents,
+    roleDataComplete:
+      upstreamByName.size > 0 &&
+      [...upstreamByName.values()].every((agent) => agent.role?.displayName),
+    roleDifferences,
+    starterDataComplete:
+      upstreamByName.size > 0 &&
+      [...upstreamByName.values()].every(
+        (agent) => typeof agent.isBaseContent === "boolean",
+      ),
+    starterDifferences,
+    upstreamCount: upstreamByName.size,
+  };
 }
 
 export function formatHealthReport(health) {
@@ -134,19 +216,8 @@ export function analyzeDataHealth({
   );
   const snapshotStale = snapshotAgeDays >= SNAPSHOT_REVIEW_DAYS;
 
-  const knownAgents = new Set(
-    localAgents.map((agent) => normalize(agent.name)),
-  );
-  const upstreamNames = [
-    ...new Map(
-      upstreamAgents
-        .filter((agent) => agent.displayName)
-        .map((agent) => [normalize(agent.displayName), agent.displayName]),
-    ).values(),
-  ];
-  const missingAgents = upstreamNames.filter(
-    (name) => !knownAgents.has(normalize(name)),
-  );
+  const roster = compareAgentRoster({ upstreamAgents, localAgents });
+  const missingAgents = roster.additions.map((agent) => agent.displayName);
   const lowConfidenceMapIds = Object.entries(mapMeta)
     .filter(([, meta]) => meta.confidence === "low")
     .map(([mapId]) => mapId)
@@ -171,14 +242,14 @@ export function analyzeDataHealth({
         snapshotVersion,
         snapshotUpdatedAt,
         snapshotFreshness: snapshotStale ? "stale" : "fresh",
-        missingAgents: missingAgents.map(normalize).sort(),
+        missingAgents: missingAgents.map(normalizeAgentName).sort(),
         lowConfidenceMapIds,
       }),
     )
     .digest("hex")
     .slice(0, 16);
   const health = {
-    agentCount: upstreamNames.length,
+    agentCount: roster.upstreamCount,
     level,
     livePatch,
     lowConfidenceMaps,
@@ -215,14 +286,7 @@ export function decideIssueAction({
 }
 
 async function main() {
-  const [version, upstreamAgents] = await Promise.all([
-    getJson(VERSION_URL),
-    getJson(AGENTS_URL),
-  ]);
-  const health = analyzeDataHealth({
-    upstreamPatch: version.branch || version.riotClientVersion,
-    upstreamAgents,
-  });
+  const health = analyzeDataHealth(await fetchLiveGameData());
   console.log(health.report);
   if (health.needsAttention) process.exitCode = 2;
 }
