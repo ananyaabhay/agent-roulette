@@ -1,11 +1,15 @@
 // Drift detection and the map-evidence presentation rules.
 import test from "node:test";
 import assert from "node:assert/strict";
+import { readFile } from "node:fs/promises";
 
 import { AGENTS } from "../data/game-data.js";
-import { MAPS } from "../data/maps.js";
 import { MAP_META } from "../data/map-meta.js";
-import { extractPatch, findDrift } from "../scripts/check-game-data.js";
+import {
+  analyzeDataHealth,
+  decideIssueAction,
+  extractPatch,
+} from "../scripts/check-game-data.js";
 import {
   MAP_EVIDENCE_CAVEAT,
   buildLineupNotes,
@@ -14,7 +18,16 @@ import {
 } from "../logic/recommendations.js";
 
 const currentAgents = AGENTS.map((agent) => ({ displayName: agent.name }));
-const currentMaps = MAPS.map((map) => ({ displayName: map.name }));
+const healthyCheck = (overrides = {}) =>
+  analyzeDataHealth({
+    upstreamPatch: "13.04",
+    upstreamAgents: currentAgents,
+    now: "2026-09-08T12:00:00Z",
+    mapMeta: {},
+    snapshotVersion: "13.04-2026-08-31",
+    snapshotUpdatedAt: "2026-08-31",
+    ...overrides,
+  });
 
 test("patch numbers are read out of whatever shape upstream sends", () => {
   assert.equal(extractPatch("release-13.04"), "13.04");
@@ -24,56 +37,109 @@ test("patch numbers are read out of whatever shape upstream sends", () => {
   assert.equal(extractPatch(undefined), null);
 });
 
-test("a matching game reports no drift", () => {
-  const findings = findDrift({
-    upstreamPatch: "13.04",
-    upstreamAgents: currentAgents,
-    upstreamMaps: currentMaps,
-  });
-  assert.deepEqual(findings, []);
+test("a matching roster, patch, and fresh snapshot report healthy", () => {
+  const health = healthyCheck();
+  assert.equal(health.level, "healthy");
+  assert.equal(health.needsAttention, false);
+  assert.match(health.report, /Live VALORANT patch: 13\.04/);
+  assert.match(health.report, /✓ 8 days old/);
 });
 
-test("a new patch is reported", () => {
-  const findings = findDrift({
-    upstreamPatch: "14.00",
-    upstreamAgents: currentAgents,
-    upstreamMaps: currentMaps,
-  });
-  assert.equal(findings.length, 1);
-  assert.match(findings[0], /live game is on 14\.00/);
+test("patch drift is a review signal, including map-rotation review", () => {
+  const health = healthyCheck({ upstreamPatch: "14.00" });
+  assert.equal(health.level, "review");
+  assert.match(health.report, /Live VALORANT patch: 14\.00/);
+  assert.match(health.report, /Map Smart snapshot patch: 13\.04/);
+  assert.match(health.report, /Meta snapshot is behind the live game patch/);
+  assert.match(
+    health.report,
+    /Competitive map rotation[\s\S]*Review recommended after patch change/,
+  );
 });
 
-test("an agent we don't know about is reported by name", () => {
-  const findings = findDrift({
-    upstreamPatch: "13.04",
+test("a 14-day-old snapshot is a review signal", () => {
+  const health = healthyCheck({ now: "2026-09-14T00:00:00Z" });
+  assert.equal(health.snapshotAgeDays, 14);
+  assert.equal(health.snapshotStale, true);
+  assert.match(health.report, /⚠ 14 days old — review recommended/);
+});
+
+test("an unknown playable agent is an action-needed finding", () => {
+  const health = healthyCheck({
     upstreamAgents: [...currentAgents, { displayName: "Someone New" }],
-    upstreamMaps: currentMaps,
   });
-  assert.equal(findings.length, 1);
-  assert.match(findings[0], /Someone New/);
-  assert.match(findings[0], /fetch:art/);
+  assert.equal(health.level, "action");
+  assert.match(health.report, /🔴 New playable agent detected: Someone New/);
+  assert.match(health.report, /Update local game data and agent art/);
 });
 
-test("a new map is reported", () => {
-  const findings = findDrift({
-    upstreamPatch: "13.04",
-    upstreamAgents: currentAgents,
-    upstreamMaps: [...currentMaps, { displayName: "Somewhere New" }],
+test("irrelevant upstream maps cannot create missing-map warnings", () => {
+  const health = healthyCheck({
+    upstreamMaps: [
+      { displayName: "Bind" },
+      { displayName: "Fracture" },
+      { displayName: "Range" },
+    ],
   });
-  assert.equal(findings.length, 1);
-  assert.match(findings[0], /Somewhere New/);
+  assert.equal(health.level, "healthy");
+  assert.doesNotMatch(health.report, /Bind|Fracture|Range|Missing maps/i);
 });
 
 test("agents whose names differ only by punctuation are not false positives", () => {
   // KAY/O is the one that breaks naive matching.
-  const findings = findDrift({
-    upstreamPatch: "13.04",
+  const health = healthyCheck({
     upstreamAgents: currentAgents.map((agent) =>
       agent.displayName === "KAY/O" ? { displayName: "KAY / O" } : agent,
     ),
-    upstreamMaps: currentMaps,
   });
-  assert.deepEqual(findings, []);
+  assert.deepEqual(health.missingAgents, []);
+});
+
+test("current low-confidence maps are reported without recalculation", () => {
+  const health = healthyCheck({ mapMeta: MAP_META });
+  assert.deepEqual(health.lowConfidenceMaps, ["Abyss"]);
+  assert.match(health.report, /Low-confidence maps[\s\S]*⚠ Abyss/);
+});
+
+test("unchanged findings do not create duplicate issue comments", () => {
+  const first = healthyCheck({ upstreamPatch: "14.00" });
+  const nextWeek = healthyCheck({
+    upstreamPatch: "14.00",
+    now: "2026-09-10T12:00:00Z",
+  });
+  assert.equal(first.signature, nextWeek.signature);
+  assert.equal(
+    decideIssueAction({
+      currentSignature: nextWeek.signature,
+      issueState: "open",
+      needsAttention: true,
+      previousSignature: first.signature,
+    }),
+    "none",
+  );
+});
+
+test("a previously unhealthy issue closes when all checks become healthy", () => {
+  const health = healthyCheck();
+  assert.equal(
+    decideIssueAction({
+      currentSignature: health.signature,
+      issueState: "open",
+      needsAttention: health.needsAttention,
+      previousSignature: "older-status",
+    }),
+    "close",
+  );
+});
+
+test("workflow stays weekly on Wednesday and keeps manual dispatch", async () => {
+  const workflow = await readFile(
+    new URL("../.github/workflows/game-data-drift.yml", import.meta.url),
+    "utf8",
+  );
+  assert.match(workflow, /cron: "0 6 \* \* 3"/);
+  assert.match(workflow, /workflow_dispatch:/);
+  assert.doesNotMatch(workflow, /valorant-api\.com\/v1\/maps/);
 });
 
 test("observed agents come back as ordered names with no numbers", () => {

@@ -1,12 +1,12 @@
 name: Game data drift
 
-# There is no official endpoint for the map rotation or agent pick rates, so
-# map-meta.js stays a reviewed, dated snapshot. This job doesn't edit it — it
-# watches for drift and files an issue so a human knows to look.
+# Valorant-API is used for the live patch and playable-agent roster only. There
+# is no trustworthy Competitive rotation or pick-rate endpoint, so this job
+# reports review signals and never edits the product data.
 on:
   schedule:
-    # Tuesdays 06:00 UTC, shortly after Riot's usual patch window.
-    - cron: "0 6 * * 2"
+    # Wednesdays 06:00 UTC, after the usual patch rollout window.
+    - cron: "0 6 * * 3"
   workflow_dispatch:
 
 permissions:
@@ -25,53 +25,116 @@ jobs:
         with:
           node-version: 22
 
-      - name: Compare local data against the live game
+      - name: Check live patch, agent roster, and snapshot health
         id: check
         run: |
           set +e
-          node scripts/check-game-data.js > drift.txt 2>&1
+          node scripts/check-game-data.js > data-health.txt 2>&1
           echo "status=$?" >> "$GITHUB_OUTPUT"
-          cat drift.txt
+          cat data-health.txt
 
-      - name: Open or update a drift issue
-        if: steps.check.outputs.status == '2'
+      - name: Open, update, or close the data health issue
+        if: steps.check.outputs.status == '0' || steps.check.outputs.status == '2'
         uses: actions/github-script@v7
+        env:
+          CHECK_STATUS: ${{ steps.check.outputs.status }}
         with:
           script: |
             const fs = require("fs");
-            const report = fs.readFileSync("drift.txt", "utf8");
-            const title = "Game data drift detected";
-            const body = [
-              "The live game has moved past our local snapshot.",
-              "",
-              "```",
-              report.trim(),
-              "```",
-              "",
-              "Nothing has been changed automatically — the map weights are a",
-              "reviewed snapshot and a human should refresh them.",
-            ].join("\n");
-
-            const existing = await github.rest.issues.listForRepo({
+            const { pathToFileURL } = require("url");
+            const report = fs.readFileSync("data-health.txt", "utf8").trim();
+            const helpers = await import(
+              pathToFileURL(`${process.env.GITHUB_WORKSPACE}/scripts/check-game-data.js`).href
+            );
+            const title = "Map Smart data review needed";
+            const legacyTitle = "Game data drift detected";
+            const managedMarker = helpers.MANAGED_ISSUE_MARKER;
+            const currentSignature = helpers.extractReportSignature(report);
+            const needsAttention = process.env.CHECK_STATUS === "2";
+            const repo = {
               owner: context.repo.owner,
               repo: context.repo.repo,
-              state: "open",
-              labels: "data-drift",
+            };
+
+            const candidates = await github.paginate(
+              github.rest.issues.listForRepo,
+              {
+                ...repo,
+                state: "all",
+                labels: "data-drift",
+                per_page: 100,
+              },
+            );
+            const issue = candidates.find(
+              (item) =>
+                !item.pull_request &&
+                ((item.title === title && item.body?.includes(managedMarker)) ||
+                  item.title === legacyTitle),
+            );
+            const issueRef = issue
+              ? { ...repo, issue_number: issue.number }
+              : null;
+
+            const comments = issue
+              ? await github.paginate(github.rest.issues.listComments, {
+                  ...issueRef,
+                  per_page: 100,
+                })
+              : [];
+            const previousSignature = [
+              issue?.body || "",
+              ...comments.map((comment) => comment.body || ""),
+            ]
+              .map(helpers.extractReportSignature)
+              .filter(Boolean)
+              .at(-1) || null;
+            const action = helpers.decideIssueAction({
+              currentSignature,
+              issueState: issue?.state || null,
+              needsAttention,
+              previousSignature,
             });
 
-            if (existing.data.length) {
-              await github.rest.issues.createComment({
-                owner: context.repo.owner,
-                repo: context.repo.repo,
-                issue_number: existing.data[0].number,
-                body,
-              });
-            } else {
+            if (action === "create") {
               await github.rest.issues.create({
-                owner: context.repo.owner,
-                repo: context.repo.repo,
+                ...repo,
                 title,
-                body,
+                body: report,
                 labels: ["data-drift"],
               });
+              return;
             }
+            if (!issue || action === "none") return;
+            const updateIssue = (changes) =>
+              github.rest.issues.update({ ...issueRef, ...changes });
+            const comment = (body) =>
+              github.rest.issues.createComment({ ...issueRef, body });
+            if (issue.title !== title) {
+              await updateIssue({
+                title,
+                body: `${managedMarker}\n\n${issue.body || ""}`.trim(),
+              });
+            }
+
+            if (action === "close") {
+              const body = [
+                managedMarker,
+                `<!-- agent-roulette-data-health-status:${currentSignature} -->`,
+                "",
+                "Data health is back within expected limits. Closing automatically.",
+              ].join("\n");
+              await comment(body);
+              await updateIssue({ state: "closed" });
+              return;
+            }
+
+            if (action.startsWith("reopen")) {
+              await updateIssue({ state: "open" });
+            }
+            if (action.endsWith("comment")) {
+              await comment(report);
+            }
+
+      - name: Fail if the live check could not run
+        if: steps.check.outputs.status == '1'
+        run: exit 1

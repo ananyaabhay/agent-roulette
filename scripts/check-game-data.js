@@ -1,26 +1,27 @@
 /**
- * Detect when the live game has moved past our local snapshot.
+ * Report reviewable drift without changing any product data.
  *
- * There is no official endpoint for the map rotation or for agent pick rates,
- * so nothing here can update map-meta.js on its own — the weights are a
- * reviewed, dated snapshot and should stay that way. What this can do is
- * notice drift and tell a human what to look at:
- *
- *   - a new patch number upstream
- *   - agents that exist in the game but not in data/game-data.js
- *   - maps that exist in the game but not in data/maps.js
- *
- * Exit code 0 means we are current. Exit code 2 means drift was found, which
- * the workflow turns into an issue.
+ * Valorant-API provides a useful live patch and playable-agent roster, but not
+ * a trustworthy Competitive map rotation. Map rotation therefore becomes a
+ * human review item after patch drift instead of an automated map comparison.
  */
+import { createHash } from "node:crypto";
+
 import { AGENTS } from "../data/game-data.js";
-import { MAPS } from "../data/maps.js";
-import { MAP_META_UPDATED_AT, MAP_META_VERSION } from "../data/map-meta.js";
+import { MAP_BY_ID } from "../data/maps.js";
+import {
+  MAP_META,
+  MAP_META_UPDATED_AT,
+  MAP_META_VERSION,
+} from "../data/map-meta.js";
 
 const VERSION_URL = "https://valorant-api.com/v1/version";
 const AGENTS_URL =
   "https://valorant-api.com/v1/agents?isPlayableCharacter=true";
-const MAPS_URL = "https://valorant-api.com/v1/maps";
+const DAY_IN_MS = 24 * 60 * 60 * 1000;
+
+export const SNAPSHOT_REVIEW_DAYS = 14;
+export const MANAGED_ISSUE_MARKER = "<!-- agent-roulette-data-health -->";
 
 const normalize = (value) =>
   String(value || "").toLowerCase().replace(/[^a-z0-9]/g, "");
@@ -38,65 +39,192 @@ export function extractPatch(branchOrVersion) {
   return match ? `${match[1]}.${match[2]}` : null;
 }
 
-export function findDrift({ upstreamPatch, upstreamAgents, upstreamMaps }) {
-  const findings = [];
+function mapName(mapId) {
+  return MAP_BY_ID.get(mapId)?.name ||
+    mapId.charAt(0).toUpperCase() + mapId.slice(1);
+}
 
-  const localPatch = extractPatch(MAP_META_VERSION);
-  if (upstreamPatch && localPatch && upstreamPatch !== localPatch) {
-    findings.push(
-      `Patch moved: live game is on ${upstreamPatch}, our snapshot is ${localPatch} ` +
-        `(taken ${MAP_META_UPDATED_AT}). Review the map rotation and refresh ` +
-        `data/map-meta.js.`,
+function dayLabel(days) {
+  return `${days} ${days === 1 ? "day" : "days"}`;
+}
+
+export function formatHealthReport(health) {
+  const lines = [
+    MANAGED_ISSUE_MARKER,
+    `<!-- agent-roulette-data-health-status:${health.signature} -->`,
+    "## Data health check",
+    "",
+    `Live VALORANT patch: ${health.livePatch || "Unknown"}`,
+    `Map Smart snapshot patch: ${health.snapshotPatch || "Unknown"}`,
+    `Snapshot age: ${dayLabel(health.snapshotAgeDays)}`,
+    "",
+    "### Agent roster",
+  ];
+
+  if (health.missingAgents.length) {
+    health.missingAgents.forEach((name) => {
+      lines.push(`🔴 New playable agent detected: ${name}`);
+    });
+  } else {
+    lines.push(
+      `✓ ${health.agentCount} / ${health.agentCount} playable agents match local data`,
     );
   }
 
-  const knownAgents = new Set(AGENTS.map((agent) => normalize(agent.name)));
-  const newAgents = upstreamAgents
-    .filter((agent) => !knownAgents.has(normalize(agent.displayName)))
-    .map((agent) => agent.displayName);
-  if (newAgents.length) {
-    findings.push(
-      `New agent(s) in the game and missing from data/game-data.js: ` +
-        `${newAgents.join(", ")}. Add them, set the role, and run npm run fetch:art.`,
-    );
+  lines.push("", "### Competitive map rotation");
+  if (!health.livePatch) {
+    lines.push("⚠ Live patch could not be determined — review recommended");
+  } else if (health.patchDrift) {
+    lines.push("⚠ Review recommended after patch change");
+  } else {
+    lines.push("✓ No review triggered by patch drift");
   }
 
-  const knownMaps = new Set(MAPS.map((map) => normalize(map.name)));
-  const newMaps = upstreamMaps
-    .filter((map) => map.displayName && !knownMaps.has(normalize(map.displayName)))
-    .map((map) => map.displayName);
-  if (newMaps.length) {
-    findings.push(
-      `Map(s) in the game and missing from data/maps.js: ${newMaps.join(", ")}.`,
+  lines.push("", "### Map Smart snapshot");
+  if (health.patchDrift) {
+    lines.push(
+      "⚠ Meta snapshot is behind the live game patch — review recommended",
     );
   }
+  lines.push(
+    health.snapshotStale
+      ? `⚠ ${dayLabel(health.snapshotAgeDays)} old — review recommended`
+      : `✓ ${dayLabel(health.snapshotAgeDays)} old`,
+  );
 
-  return findings;
+  lines.push("", "### Low-confidence maps");
+  lines.push(
+    health.lowConfidenceMaps.length
+      ? `⚠ ${health.lowConfidenceMaps.join(", ")}`
+      : "✓ None",
+  );
+
+  lines.push("", "### Recommended action");
+  if (health.missingAgents.length) {
+    lines.push("Update local game data and agent art.");
+  } else if (health.needsAttention) {
+    lines.push("Review the meta snapshot before the next refresh.");
+  } else {
+    lines.push("No action needed.");
+  }
+  lines.push("", "Nothing was changed automatically.");
+  return lines.join("\n");
+}
+
+export function analyzeDataHealth({
+  upstreamPatch,
+  upstreamAgents = [],
+  now = new Date(),
+  localAgents = AGENTS,
+  mapMeta = MAP_META,
+  snapshotVersion = MAP_META_VERSION,
+  snapshotUpdatedAt = MAP_META_UPDATED_AT,
+}) {
+  const livePatch = extractPatch(upstreamPatch);
+  const snapshotPatch = extractPatch(snapshotVersion);
+  const patchDrift = Boolean(
+    livePatch && snapshotPatch && livePatch !== snapshotPatch,
+  );
+  const snapshotAgeDays = Math.max(
+    0,
+    Math.floor(
+      (new Date(now).getTime() - Date.parse(`${snapshotUpdatedAt}T00:00:00Z`)) /
+        DAY_IN_MS,
+    ),
+  );
+  const snapshotStale = snapshotAgeDays >= SNAPSHOT_REVIEW_DAYS;
+
+  const knownAgents = new Set(
+    localAgents.map((agent) => normalize(agent.name)),
+  );
+  const upstreamNames = [
+    ...new Map(
+      upstreamAgents
+        .filter((agent) => agent.displayName)
+        .map((agent) => [normalize(agent.displayName), agent.displayName]),
+    ).values(),
+  ];
+  const missingAgents = upstreamNames.filter(
+    (name) => !knownAgents.has(normalize(name)),
+  );
+  const lowConfidenceMapIds = Object.entries(mapMeta)
+    .filter(([, meta]) => meta.confidence === "low")
+    .map(([mapId]) => mapId)
+    .sort();
+  const lowConfidenceMaps = lowConfidenceMapIds.map(mapName);
+  const needsAttention = Boolean(
+    !livePatch ||
+      patchDrift ||
+      snapshotStale ||
+      missingAgents.length ||
+      lowConfidenceMaps.length,
+  );
+  const level = missingAgents.length
+    ? "action"
+    : needsAttention
+      ? "review"
+      : "healthy";
+  const signature = createHash("sha256")
+    .update(
+      JSON.stringify({
+        livePatch: livePatch || "unknown",
+        snapshotVersion,
+        snapshotUpdatedAt,
+        snapshotFreshness: snapshotStale ? "stale" : "fresh",
+        missingAgents: missingAgents.map(normalize).sort(),
+        lowConfidenceMapIds,
+      }),
+    )
+    .digest("hex")
+    .slice(0, 16);
+  const health = {
+    agentCount: upstreamNames.length,
+    level,
+    livePatch,
+    lowConfidenceMaps,
+    missingAgents,
+    needsAttention,
+    patchDrift,
+    signature,
+    snapshotAgeDays,
+    snapshotPatch,
+    snapshotStale,
+  };
+  return { ...health, report: formatHealthReport(health) };
+}
+
+export function extractReportSignature(text) {
+  return String(text || "").match(
+    /<!-- agent-roulette-data-health-status:([a-f0-9]+) -->/,
+  )?.[1] || null;
+}
+
+export function decideIssueAction({
+  currentSignature,
+  issueState,
+  needsAttention,
+  previousSignature,
+}) {
+  if (!needsAttention) return issueState === "open" ? "close" : "none";
+  if (!issueState) return "create";
+  const changed = currentSignature !== previousSignature;
+  if (issueState === "closed") {
+    return changed ? "reopen-and-comment" : "reopen";
+  }
+  return changed ? "comment" : "none";
 }
 
 async function main() {
-  const [version, upstreamAgents, upstreamMaps] = await Promise.all([
+  const [version, upstreamAgents] = await Promise.all([
     getJson(VERSION_URL),
     getJson(AGENTS_URL),
-    getJson(MAPS_URL),
   ]);
-
-  const upstreamPatch = extractPatch(version.branch || version.riotClientVersion);
-  const findings = findDrift({ upstreamPatch, upstreamAgents, upstreamMaps });
-
-  console.log(`Local snapshot : ${MAP_META_VERSION}`);
-  console.log(`Live patch     : ${upstreamPatch || "unknown"}`);
-  console.log(`Agents known   : ${AGENTS.length}`);
-  console.log(`Maps known     : ${MAPS.length}\n`);
-
-  if (!findings.length) {
-    console.log("No drift. Local data still matches the live game.");
-    return;
-  }
-
-  console.log("Drift detected:\n");
-  findings.forEach((line) => console.log(`- ${line}`));
-  process.exitCode = 2;
+  const health = analyzeDataHealth({
+    upstreamPatch: version.branch || version.riotClientVersion,
+    upstreamAgents,
+  });
+  console.log(health.report);
+  if (health.needsAttention) process.exitCode = 2;
 }
 
 // Only run when invoked directly, so the pure functions stay testable.
