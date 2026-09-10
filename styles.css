@@ -210,6 +210,7 @@ button:disabled {
 .section-heading h1,
 .draft-heading h2,
 .context-heading h2,
+.team-needs-head strong,
 .library-head h2,
 .player-editor h3 {
   margin: 0;
@@ -343,6 +344,13 @@ button:disabled {
   font-size: 14px;
 }
 
+.squad-copy > span {
+  overflow: visible;
+  line-height: 1.35;
+  text-overflow: clip;
+  white-space: normal;
+}
+
 .squad-controls {
   display: flex;
   gap: 6px;
@@ -474,8 +482,20 @@ button:disabled {
   border-top: 1px solid var(--rule);
 }
 
-.context-heading h2 {
+.context-heading h2,
+.team-needs-head strong {
   font-size: 24px;
+}
+
+.context-heading > div,
+.team-needs-head > span:first-child {
+  display: grid;
+  gap: 6px;
+}
+
+.context-heading .eyebrow,
+.team-needs-head .eyebrow {
+  margin: 0;
 }
 
 .context-heading > span,
@@ -685,15 +705,6 @@ button:disabled {
   justify-content: space-between;
   gap: 14px;
   min-height: 48px;
-}
-
-.team-needs-head strong {
-  display: block;
-  font-family: var(--display);
-  font-size: 23px;
-  line-height: 0.9;
-  letter-spacing: 0.04em;
-  text-transform: uppercase;
 }
 
 .needs-signal {
@@ -987,14 +998,6 @@ button:disabled {
   color: var(--muted);
   font-size: 13px;
   line-height: 1.55;
-}
-
-.map-intel-title {
-  margin: 4px 0 12px;
-  font-family: var(--display);
-  font-size: 22px;
-  line-height: 1;
-  letter-spacing: 0.02em;
 }
 
 .map-intel-label {

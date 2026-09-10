@@ -495,6 +495,8 @@ function renderPlayers() {
   }
 
   players.forEach((player, index) => {
+    const ownedCount = player.ownedAgentIds.size;
+    const availableCount = getAvailableAgents(player, takenAgentIds, AGENTS).length;
     const card = element("article", "squad-player");
     const identity = element("div", "squad-identity");
     const monogram = element(
@@ -510,7 +512,9 @@ function renderPlayers() {
       element(
         "span",
         "",
-        `${player.ownedAgentIds.size} owned · ${getAvailableAgents(player, takenAgentIds, AGENTS).length} available`,
+        ownedCount === availableCount
+          ? `${ownedCount} owned`
+          : `${ownedCount} owned · ${availableCount} available`,
       ),
     );
     identity.append(monogram, copy);
@@ -1126,8 +1130,6 @@ function renderMapIntel() {
   }
   const intel = getMapIntel(selectedMapId);
   if (!intel) return;
-  body.append(element("h3", "map-intel-title", `Map: ${intel.map.name}`));
-
   body.append(element("h4", "map-intel-label", "Agents seen most often"));
   const observed = element("ol", "map-ranking");
   observedAgentNames(selectedMapId).forEach((name) => {
@@ -1159,7 +1161,7 @@ function renderMapIntel() {
   }).format(new Date(`${intel.updatedAt}T00:00:00Z`));
   source.append(
     document.createTextNode(
-      `Meta snapshot: Patch ${intel.version.split("-")[0]} · ${snapshotDate} · `,
+      `Last updated on ${snapshotDate} · Snapshot patch ${intel.version.split("-")[0]} · `,
     ),
   );
   const link = element("a", "", "Public Agent Stats source");
