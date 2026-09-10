@@ -222,7 +222,7 @@ export function observedAgentNames(mapId, agents = AGENTS, limit = 4) {
  * describes VCT stages, not a Friday night in Unrated.
  */
 export const MAP_EVIDENCE_CAVEAT =
-  "This is professional play, not the ranked ladder — coordinated teams pick very differently from a normal lobby.";
+  "Pro play also differs from normal ranked games, so treat this as a signal rather than a tier list.";
 
 /**
  * Plain-language disclosure of how much data sits behind a map. The same
@@ -232,10 +232,10 @@ export function describeMapEvidence(mapId) {
   const intel = getMapIntel(mapId);
   if (!intel) return "";
   if (intel.confidence === "high") {
-    return `Drawn from ${intel.sampleSize} recorded professional matches on this map — enough to show a real pattern.`;
+    return `This snapshot includes ${intel.sampleSize} pro matches, giving the ranking a stronger evidence base.`;
   }
   if (intel.confidence === "medium") {
-    return `Drawn from ${intel.sampleSize} recorded professional matches. A moderate sample, so treat the order as a hint rather than a fact.`;
+    return `This snapshot includes ${intel.sampleSize} pro matches. The data is useful, but the ranking is still best treated as directional.`;
   }
-  return `Drawn from only ${intel.sampleSize} recorded professional matches. That is too few to be reliable — a handful of games could reorder this entirely.`;
+  return `Only ${intel.sampleSize} pro matches were included in this snapshot, so the ranking may shift quickly as more games are played.`;
 }

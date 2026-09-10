@@ -55,6 +55,11 @@ const LEGACY_PREFERENCES_KEYS = [
 ];
 const SESSION_KEY = "agent-roulette:match-session:v2";
 const LEGACY_SESSION_KEY = "agent-roulette:match-session:v1";
+const SETUP_WIDTH_KEY = "agent-roulette:setup-column-width:v1";
+const SETUP_WIDTH_DEFAULT = 410;
+const SETUP_WIDTH_MIN = 360;
+const SETUP_WIDTH_MAX = 480;
+const SETUP_WIDTH_STEP = 10;
 const MAX_SAVED_PLAYERS = 50;
 const MAX_NAME_LENGTH = 60;
 const reducedMotion = window.matchMedia(
@@ -68,6 +73,47 @@ const $ = (selector) => document.querySelector(selector);
 const playersElement = $("#players");
 const resultsElement = $("#results");
 const lobbyElement = $("#lobbyCard");
+const commandGridElement = $(".command-grid");
+const columnResizerElement = $("#columnResizer");
+
+function clampSetupWidth(width) {
+  return Math.min(SETUP_WIDTH_MAX, Math.max(SETUP_WIDTH_MIN, Math.round(width)));
+}
+
+function loadSetupWidth() {
+  try {
+    const storedWidth = Number(localStorage.getItem(SETUP_WIDTH_KEY));
+    return Number.isFinite(storedWidth) && storedWidth > 0
+      ? clampSetupWidth(storedWidth)
+      : SETUP_WIDTH_DEFAULT;
+  } catch (error) {
+    console.warn("Agent Roulette could not read the saved column width.", error);
+    return SETUP_WIDTH_DEFAULT;
+  }
+}
+
+let setupColumnWidth = loadSetupWidth();
+
+function setSetupWidth(width, persist = false) {
+  setupColumnWidth = clampSetupWidth(width);
+  commandGridElement.style.setProperty(
+    "--setup-column-width",
+    `${setupColumnWidth}px`,
+  );
+  columnResizerElement.setAttribute("aria-valuenow", String(setupColumnWidth));
+  columnResizerElement.setAttribute(
+    "aria-valuetext",
+    `Setup column ${setupColumnWidth} pixels`,
+  );
+  if (!persist) return;
+  try {
+    localStorage.setItem(SETUP_WIDTH_KEY, String(setupColumnWidth));
+  } catch (error) {
+    console.warn("Agent Roulette could not save the column width.", error);
+  }
+}
+
+setSetupWidth(setupColumnWidth);
 
 function makePlayerId() {
   if (globalThis.crypto?.randomUUID) return globalThis.crypto.randomUUID();
@@ -1080,33 +1126,43 @@ function renderMapIntel() {
   }
   const intel = getMapIntel(selectedMapId);
   if (!intel) return;
-  const heading = element("div", "map-intel-heading");
-  heading.append(
-    element("strong", "", intel.map.name),
-    element("span", "", describeMapEvidence(selectedMapId)),
-    element("span", "", MAP_EVIDENCE_CAVEAT),
-  );
-  body.append(heading);
+  body.append(element("h3", "map-intel-title", `Map: ${intel.map.name}`));
 
-  const observed = element("div", "map-observed");
-  observed.append(element("span", "", "Seen most often, in order"));
-  observedAgentNames(selectedMapId).forEach((name, index) => {
-    observed.append(element("b", "", `${index + 1}. ${name}`));
+  body.append(element("h4", "map-intel-label", "Agents seen most often"));
+  const observed = element("ol", "map-ranking");
+  observedAgentNames(selectedMapId).forEach((name) => {
+    observed.append(element("li", "", name));
   });
   body.append(observed);
 
+  body.append(element("h4", "map-intel-label", "Note"));
   body.append(
     element(
       "p",
       "map-note",
-      `Map Smart applies ${Math.round(getMapConfidenceInfluence(selectedMapId) * 100)}% of the configured influence for this ${intel.confidence}-confidence snapshot. It only reorders legal options; it never changes ownership, uniqueness, or role rules.`,
+      `${describeMapEvidence(selectedMapId)} ${MAP_EVIDENCE_CAVEAT}`,
+    ),
+  );
+  body.append(
+    element(
+      "p",
+      "map-influence",
+      `Map Smart uses ${Math.round(getMapConfidenceInfluence(selectedMapId) * 100)}% influence because this snapshot has ${intel.confidence} confidence. It changes how likely legal agents are to roll, but never overrides ownership, unique-agent rules, or team-role rules.`,
     ),
   );
   const source = element("p", "map-source");
+  const snapshotDate = new Intl.DateTimeFormat("en-US", {
+    month: "short",
+    day: "numeric",
+    year: "numeric",
+    timeZone: "UTC",
+  }).format(new Date(`${intel.updatedAt}T00:00:00Z`));
   source.append(
-    document.createTextNode(`Patch ${intel.version.split("-")[0]} · snapshot ${intel.updatedAt} · `),
+    document.createTextNode(
+      `Meta snapshot: Patch ${intel.version.split("-")[0]} · ${snapshotDate} · `,
+    ),
   );
-  const link = element("a", "", "public Agent Stats source");
+  const link = element("a", "", "Public Agent Stats source");
   link.href = intel.sources.agentStats;
   link.target = "_blank";
   link.rel = "noopener noreferrer";
@@ -1614,6 +1670,39 @@ $("#mapSelect").addEventListener("change", (event) => {
       true,
     );
   }
+});
+
+columnResizerElement.addEventListener("pointerdown", (event) => {
+  if (!window.matchMedia("(min-width: 1100px)").matches || event.button !== 0) return;
+  event.preventDefault();
+  columnResizerElement.setPointerCapture(event.pointerId);
+});
+columnResizerElement.addEventListener("pointermove", (event) => {
+  if (!columnResizerElement.hasPointerCapture(event.pointerId)) return;
+  const gridLeft = commandGridElement.getBoundingClientRect().left;
+  setSetupWidth(event.clientX - gridLeft);
+});
+columnResizerElement.addEventListener("pointerup", (event) => {
+  if (!columnResizerElement.hasPointerCapture(event.pointerId)) return;
+  columnResizerElement.releasePointerCapture(event.pointerId);
+  setSetupWidth(setupColumnWidth, true);
+});
+columnResizerElement.addEventListener("pointercancel", () => {
+  setSetupWidth(setupColumnWidth, true);
+});
+columnResizerElement.addEventListener("keydown", (event) => {
+  const keyWidths = {
+    ArrowLeft: setupColumnWidth - SETUP_WIDTH_STEP,
+    ArrowRight: setupColumnWidth + SETUP_WIDTH_STEP,
+    Home: SETUP_WIDTH_MIN,
+    End: SETUP_WIDTH_MAX,
+  };
+  if (!(event.key in keyWidths)) return;
+  event.preventDefault();
+  setSetupWidth(keyWidths[event.key], true);
+});
+columnResizerElement.addEventListener("dblclick", () => {
+  setSetupWidth(SETUP_WIDTH_DEFAULT, true);
 });
 
 if (loadedPreferences.migratedLegacy) savePreferences();

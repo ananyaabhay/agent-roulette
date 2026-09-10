@@ -18,6 +18,7 @@
   --display: "Big Shoulders Display", Impact, sans-serif;
   --body: "IBM Plex Sans", system-ui, sans-serif;
   --mono: "IBM Plex Mono", ui-monospace, monospace;
+  --setup-column-width: 410px;
   color-scheme: dark;
 }
 
@@ -103,16 +104,18 @@ button:disabled {
 
 .brand-mark {
   display: grid;
-  width: 42px;
+  width: 46px;
   height: 42px;
   place-items: center;
   background: var(--accent);
   color: #fff;
-  clip-path: polygon(0 0, 74% 0, 100% 26%, 100% 100%, 26% 100%, 0 74%);
-  font-family: var(--display);
-  font-size: 20px;
-  font-weight: 900;
-  letter-spacing: 0.04em;
+  clip-path: polygon(0 0, 78% 0, 100% 24%, 100% 100%, 20% 100%, 0 76%);
+}
+
+.brand-mark svg {
+  width: 38px;
+  height: 30px;
+  fill: currentColor;
 }
 
 .brand-copy,
@@ -153,6 +156,10 @@ button:disabled {
   grid-template-columns: clamp(380px, 29vw, 420px) minmax(0, 1fr);
   gap: 24px;
   padding: 24px 0 38px;
+}
+
+.column-resizer {
+  display: none;
 }
 
 .setup-panel,
@@ -928,18 +935,6 @@ button:disabled {
 #spinHint[data-tone="ready"],
 #spinHint[data-tone="locked"] { color: var(--go); }
 
-/* Ranked names, never percentages — see logic/recommendations.js. */
-.map-observed b {
-  font-variant-numeric: tabular-nums;
-}
-
-.map-note {
-  margin: 8px 0 0;
-  color: var(--quiet);
-  font-size: 11px;
-  line-height: 1.5;
-}
-
 .mode-description {
   margin: 0;
   color: var(--muted);
@@ -988,45 +983,67 @@ button:disabled {
 }
 
 .map-intel p {
-  margin: 6px 0 0;
+  margin: 7px 0 0;
   color: var(--muted);
-  font-size: 12px;
+  font-size: 13px;
+  line-height: 1.55;
 }
 
-.map-intel-heading strong,
-.map-intel-heading span {
-  display: block;
+.map-intel-title {
+  margin: 4px 0 12px;
+  font-family: var(--display);
+  font-size: 22px;
+  line-height: 1;
+  letter-spacing: 0.02em;
 }
 
-.map-intel-heading strong {
-  font-size: 12px;
-  text-transform: capitalize;
+.map-intel-label {
+  margin: 0;
+  color: var(--ink);
+  font-size: 13px;
+  font-weight: 600;
 }
 
-.map-intel-heading span,
-.map-observed span {
-  color: var(--quiet);
-  font-family: var(--mono);
-  font-size: 10px;
-  text-transform: uppercase;
-}
-
-.map-observed {
+.map-ranking {
   display: flex;
   flex-wrap: wrap;
+  gap: 5px 18px;
+  margin: 5px 0 14px;
+  padding: 0;
+  counter-reset: map-rank;
+  list-style: none;
+}
+
+.map-ranking li {
+  display: inline-flex;
   gap: 5px;
-  margin-top: 8px;
+  color: var(--ink);
+  font-size: 13px;
+  font-weight: 600;
+  counter-increment: map-rank;
 }
 
-.map-observed span {
-  flex-basis: 100%;
+.map-ranking li::before {
+  color: var(--accent);
+  content: counter(map-rank) ".";
+  font-family: var(--mono);
+  font-size: 11px;
+  font-weight: 600;
 }
 
-.map-observed b {
-  padding: 3px 5px;
-  background: rgba(255, 255, 255, 0.055);
-  font-size: 10px;
-  font-weight: 500;
+.map-intel .map-note {
+  margin-bottom: 11px;
+}
+
+.map-influence {
+  padding-top: 10px;
+  border-top: 1px solid var(--rule);
+}
+
+.map-intel .map-source {
+  color: var(--quiet);
+  font-family: var(--mono);
+  font-size: 9px;
 }
 
 .map-source a {
@@ -1806,6 +1823,52 @@ footer p {
   }
 }
 
+@media (min-width: 1100px) {
+  .command-grid {
+    grid-template-columns: var(--setup-column-width) 24px minmax(0, 1fr);
+    gap: 0;
+  }
+
+  .column-resizer {
+    position: relative;
+    display: grid;
+    align-self: stretch;
+    place-items: center;
+    cursor: col-resize;
+    touch-action: none;
+    user-select: none;
+  }
+
+  .column-resizer::before,
+  .column-resizer::after {
+    position: absolute;
+    content: "";
+  }
+
+  .column-resizer::before {
+    width: 1px;
+    height: 100%;
+    background: var(--rule);
+  }
+
+  .column-resizer::after {
+    width: 3px;
+    height: 46px;
+    background: var(--rule-hard);
+    transition: background 140ms ease, height 140ms ease;
+  }
+
+  .column-resizer:hover::after,
+  .column-resizer:focus-visible::after {
+    height: 58px;
+    background: var(--accent);
+  }
+
+  .column-resizer:focus-visible {
+    outline: none;
+  }
+}
+
 @media (max-width: 1060px) {
   .command-grid {
     grid-template-columns: 1fr;
@@ -1913,8 +1976,13 @@ footer p {
   }
 
   .brand-mark {
-    width: 38px;
+    width: 42px;
     height: 38px;
+  }
+
+  .brand-mark svg {
+    width: 34px;
+    height: 27px;
   }
 
   .section-heading,

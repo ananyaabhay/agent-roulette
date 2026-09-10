@@ -92,11 +92,14 @@ test("every map states its sample size in plain language", () => {
   for (const [mapId, meta] of Object.entries(MAP_META)) {
     const text = describeMapEvidence(mapId);
     assert.match(text, new RegExp(String(meta.sampleSize)));
-    assert.match(text, /recorded professional matches/);
+    assert.match(text, /pro matches/);
     assert.doesNotMatch(text, /%/);
   }
-  assert.match(describeMapEvidence("abyss"), /too few to be reliable/);
-  assert.match(describeMapEvidence("lotus"), /show a real pattern/);
+  assert.match(describeMapEvidence("abyss"), /Only 26 pro matches/);
+  assert.match(describeMapEvidence("abyss"), /may shift quickly/);
+  assert.match(describeMapEvidence("summit"), /useful.*directional/);
+  assert.match(describeMapEvidence("lotus"), /stronger evidence base/);
+  assert.doesNotMatch(describeMapEvidence("lotus"), /only|shift quickly/i);
 });
 
 test("remembered maps produce zero map-result commentary outside Map Smart", () => {
@@ -146,9 +149,10 @@ test("Map Smart Notes classify map-favoured, constraint-led, and wildcard outcom
 });
 
 test("the panel discloses that the source is pro play, not the ladder", () => {
-  assert.match(MAP_EVIDENCE_CAVEAT, /professional play/);
-  assert.match(MAP_EVIDENCE_CAVEAT, /ranked ladder/);
+  assert.match(MAP_EVIDENCE_CAVEAT, /Pro play/);
+  assert.match(MAP_EVIDENCE_CAVEAT, /normal ranked games/);
+  assert.match(MAP_EVIDENCE_CAVEAT, /signal rather than a tier list/);
   for (const mapId of Object.keys(MAP_META)) {
-    assert.match(describeMapEvidence(mapId), /professional matches/);
+    assert.match(describeMapEvidence(mapId), /pro matches/);
   }
 });
