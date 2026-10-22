@@ -1,4 +1,5 @@
 // Agent Roulette V1.5 experience layer over the stable legality solver.
+import { getUpcomingAgentNotice } from "./logic/upcoming.js";
 import {
   AGENT_BY_ID,
   AGENTS,
@@ -1748,6 +1749,8 @@ columnResizerElement.addEventListener("dblclick", () => {
 
 if (loadedPreferences.migratedLegacy) savePreferences();
 saveSession();
+// Called before renderAll so an unrelated render failure cannot suppress it.
+renderUpcomingAgent();
 renderAll();
 if (storageRecoveryNotice) {
   showNote(
@@ -1813,5 +1816,3 @@ function renderUpcomingAgent() {
     }
   };
 }
-
-renderUpcomingAgent();
