@@ -216,18 +216,38 @@ export function observedAgentNames(mapId, agents = AGENTS, limit = 4) {
 }
 
 /**
- * Where the snapshot comes from. This matters more than sample size: the
- * source is professional match data, and a coordinated five-stack running a
- * solved meta picks nothing like an ordinary lobby. Omen at 94% on Ascent
- * describes VCT stages, not a Friday night in Unrated.
+ * Where the snapshot comes from, which matters more than sample size. A
+ * coordinated five-stack running a solved meta picks nothing like an ordinary
+ * lobby, so a pro snapshot and a ladder snapshot need different warnings.
+ * data/raw/ records which one a table came from.
  */
-export const MAP_EVIDENCE_CAVEAT =
+const PROFESSIONAL_CAVEAT =
   "Pro play also differs from normal ranked games, so treat this as a signal rather than a tier list.";
+const LADDER_CAVEAT =
+  "This is the ranked ladder, so it shows what players reach for rather than what a coordinated team would run.";
+
+export const MAP_EVIDENCE_CAVEAT = PROFESSIONAL_CAVEAT;
+
+export function mapEvidenceCaveat(mapId) {
+  const intel = getMapIntel(mapId);
+  if (!intel || intel.confidence === "none") return "";
+  return intel.population === "ranked ladder" ? LADDER_CAVEAT : PROFESSIONAL_CAVEAT;
+}
 
 /**
  * Plain-language disclosure of how much data sits behind a map. The same
  * confidence band also sets the transparent Map Smart influence multiplier.
  */
+/**
+ * Snapshots can come from professional play or from the ranked ladder, and
+ * the two describe different populations. data/raw/ records which, so the copy
+ * follows the table instead of assuming pro — otherwise a vstats refresh would
+ * silently keep claiming it was VCT data.
+ */
+function describePopulation(intel) {
+  return intel.population === "ranked ladder" ? "ranked games" : "pro matches";
+}
+
 export function describeMapEvidence(mapId) {
   const intel = getMapIntel(mapId);
   if (!intel) return "";
@@ -235,10 +255,10 @@ export function describeMapEvidence(mapId) {
     return `No pick-rate snapshot has been taken for ${intel.map.name} yet, so Map Smart leaves this map alone. Role targets, ownership and unique-agent rules all still apply.`;
   }
   if (intel.confidence === "high") {
-    return `This snapshot includes ${intel.sampleSize} pro matches, giving the ranking a stronger evidence base.`;
+    return `This snapshot includes ${intel.sampleSize} ${describePopulation(intel)}, giving the ranking a stronger evidence base.`;
   }
   if (intel.confidence === "medium") {
-    return `This snapshot includes ${intel.sampleSize} pro matches. The data is useful, but the ranking is still best treated as directional.`;
+    return `This snapshot includes ${intel.sampleSize} ${describePopulation(intel)}. The data is useful, but the ranking is still best treated as directional.`;
   }
-  return `Only ${intel.sampleSize} pro matches were included in this snapshot, so the ranking may shift quickly as more games are played.`;
+  return `Only ${intel.sampleSize} ${describePopulation(intel)} were included in this snapshot, so the ranking may shift quickly as more games are played.`;
 }

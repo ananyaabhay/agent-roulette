@@ -160,9 +160,9 @@ function renderFile(entries, { patch, date, sources }) {
   }),`;
     }
     const origin = entries.has(map.id)
-      ? `    // from data/raw/${map.id}.tsv · ${entry.population} · ${entry.source}\n`
+      ? `    // from data/raw/${map.id}.tsv · ${entry.source}\n`
       : "";
-    const { population, source, ...stored } = entry;
+    const { source, ...stored } = entry;
     return `  ${map.id}: freezeMap(${origin ? "\n" + origin + "    " : ""}${serializeEntry(stored)}),`;
   }).join("\n");
 

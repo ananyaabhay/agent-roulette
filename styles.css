@@ -808,7 +808,8 @@ button:disabled {
   display: flex;
   flex-wrap: wrap;
   gap: 6px;
-  justify-content: flex-end;
+  /* every other value in this table starts at the same left edge */
+  justify-content: flex-start;
 }
 
 .agent-tag {

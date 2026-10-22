@@ -96,7 +96,7 @@ export const MAP_META = Object.freeze({
       "rolePairWeights": {}
     }),
   lotus: freezeMap(
-    // from data/raw/lotus.tsv · professional · https://www.rib.gg/
+    // from data/raw/lotus.tsv · https://www.rib.gg/
     {
       "confidence": "high",
       "sampleSize": 634,
@@ -121,7 +121,8 @@ export const MAP_META = Object.freeze({
           "agentId": "raze"
         }
       ],
-      "intel": "Three sites and rotating doors, so smokes stretch further than on a two-site map."
+      "intel": "Three sites and rotating doors, so smokes stretch further than on a two-site map.",
+      "population": "professional"
     }),
   summit: freezeMap({
       "confidence": "medium",

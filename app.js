@@ -35,7 +35,7 @@ import {
   createMapCandidateWeight,
   getMapConfidenceInfluence,
   getMapIntel,
-  MAP_EVIDENCE_CAVEAT,
+  mapEvidenceCaveat,
   describeMapEvidence,
   observedAgentNames,
 } from "./logic/recommendations.js";
@@ -1175,7 +1175,7 @@ function renderMapIntel() {
     element(
       "p",
       "map-note",
-      `${describeMapEvidence(selectedMapId)} ${MAP_EVIDENCE_CAVEAT}`,
+      `${describeMapEvidence(selectedMapId)} ${mapEvidenceCaveat(selectedMapId)}`,
     ),
   );
   body.append(

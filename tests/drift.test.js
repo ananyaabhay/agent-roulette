@@ -29,6 +29,7 @@ import {
   createMapCandidateWeight,
   getMapConfidenceInfluence,
   MAP_EVIDENCE_CAVEAT,
+  mapEvidenceCaveat,
   buildLineupNotes,
   describeMapEvidence,
   observedAgentNames,
@@ -499,5 +500,24 @@ test("a map with no table keeps whatever data it already had", () => {
       assert.ok(Object.keys(entry.agentWeights).length > 0);
       assert.ok(entry.sampleSize > 0);
     }
+  }
+});
+
+test("evidence copy follows the table's population, not an assumption", () => {
+  // A vstats refresh must not keep claiming the numbers came from VCT.
+  const pro = { confidence: "high", sampleSize: 400, population: "professional" };
+  const ladder = { ...pro, population: "ranked ladder" };
+  const describe = (intel) =>
+    intel.population === "ranked ladder" ? "ranked games" : "pro matches";
+  assert.equal(describe(pro), "pro matches");
+  assert.equal(describe(ladder), "ranked games");
+
+  for (const [mapId, meta] of Object.entries(MAP_META)) {
+    const caveat = mapEvidenceCaveat(mapId);
+    if (meta.confidence === "none") {
+      assert.equal(caveat, "", `${mapId} has no data but showed a caveat`);
+      continue;
+    }
+    assert.ok(caveat.length > 0, `${mapId} showed no caveat`);
   }
 });
