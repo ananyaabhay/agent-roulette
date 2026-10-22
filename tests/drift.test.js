@@ -8,6 +8,7 @@ import {
   GAME_IDENTITY_VALIDATED_PATCH,
 } from "../data/game-data.js";
 import { MAP_META } from "../data/map-meta.js";
+import { MAPS } from "../data/maps.js";
 import {
   analyzeDataHealth,
   decideIssueAction,
@@ -18,6 +19,8 @@ import {
   createIdentityValidationPatch,
 } from "../scripts/prepare-data-maintenance.js";
 import {
+  createMapCandidateWeight,
+  getMapConfidenceInfluence,
   MAP_EVIDENCE_CAVEAT,
   buildLineupNotes,
   describeMapEvidence,
@@ -299,8 +302,12 @@ test("maintenance workflow uploads review artifacts without remote writes", asyn
 });
 
 test("observed agents come back as ordered names with no numbers", () => {
-  for (const mapId of Object.keys(MAP_META)) {
+  for (const [mapId, meta] of Object.entries(MAP_META)) {
     const names = observedAgentNames(mapId);
+    if (meta.confidence === "none") {
+      assert.equal(names.length, 0, `${mapId} has no snapshot but listed agents`);
+      continue;
+    }
     assert.ok(names.length > 0, `${mapId} returned nothing`);
     names.forEach((name) => {
       assert.equal(typeof name, "string");
@@ -313,9 +320,15 @@ test("observed agents come back as ordered names with no numbers", () => {
 test("every map states its sample size in plain language", () => {
   for (const [mapId, meta] of Object.entries(MAP_META)) {
     const text = describeMapEvidence(mapId);
+    assert.doesNotMatch(text, /%/);
+    if (meta.confidence === "none") {
+      // Rotated in since the snapshot: there is no sample to describe.
+      assert.match(text, /No pick-rate snapshot/);
+      assert.match(text, /leaves this map alone/);
+      continue;
+    }
     assert.match(text, new RegExp(String(meta.sampleSize)));
     assert.match(text, /pro matches/);
-    assert.doesNotMatch(text, /%/);
   }
   assert.match(describeMapEvidence("abyss"), /Only 26 pro matches/);
   assert.match(describeMapEvidence("abyss"), /may shift quickly/);
@@ -374,7 +387,39 @@ test("the panel discloses that the source is pro play, not the ladder", () => {
   assert.match(MAP_EVIDENCE_CAVEAT, /Pro play/);
   assert.match(MAP_EVIDENCE_CAVEAT, /normal ranked games/);
   assert.match(MAP_EVIDENCE_CAVEAT, /signal rather than a tier list/);
-  for (const mapId of Object.keys(MAP_META)) {
+  for (const [mapId, meta] of Object.entries(MAP_META)) {
+    if (meta.confidence === "none") continue;
     assert.match(describeMapEvidence(mapId), /pro matches/);
+  }
+});
+
+test("a map rotation does not silently invalidate the stats snapshot", () => {
+  // MAP_POOL_VERSION and MAP_META_VERSION are different clocks on purpose: the
+  // pool moved to 13.08 while the pick-rate snapshot is still 13.04. The drift
+  // report must keep saying so rather than treating the pool bump as a refresh.
+  const health = analyzeDataHealth({
+    upstreamPatch: "release-13.08",
+    upstreamAgents: currentAgents,
+    now: new Date("2026-10-22T00:00:00Z"),
+  });
+  assert.equal(health.needsAttention, true);
+  assert.match(health.report, /13\.08/);
+});
+
+test("every map in the pool has a meta entry, and nothing extra", () => {
+  assert.deepEqual(
+    Object.keys(MAP_META).sort(),
+    MAPS.map((map) => map.id).sort(),
+  );
+});
+
+test("maps without a snapshot apply no map influence at any strength", () => {
+  for (const [mapId, meta] of Object.entries(MAP_META)) {
+    if (meta.confidence !== "none") continue;
+    assert.equal(getMapConfidenceInfluence(mapId), 0);
+    const weight = createMapCandidateWeight({ mapId, strength: 4 });
+    if (weight) {
+      AGENTS.forEach((agent) => assert.equal(weight(agent), 1));
+    }
   }
 });

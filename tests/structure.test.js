@@ -39,7 +39,7 @@ function seededRandom(seed) {
 }
 
 /** Appearance rate and roster spread at a given map strength. */
-function sample({ mapStrength, mapId = "ascent", trials = 1200 }) {
+function sample({ mapStrength, mapId = "lotus", trials = 1200 }) {
   const players = stack();
   const candidateWeight = createMapCandidateWeight({
     mapId,
@@ -94,17 +94,20 @@ test("out-of-range and junk positions resolve to a real stop", () => {
 });
 
 test("strength 0 produces no weighting at all", () => {
-  assert.equal(createMapCandidateWeight({ mapId: "ascent", strength: 0 }), null);
+  assert.equal(createMapCandidateWeight({ mapId: "lotus", strength: 0 }), null);
 });
 
 test("confidence transparently dampens configured influence toward neutral", () => {
-  assert.equal(getMapConfidenceInfluence("ascent"), 1);
+  assert.equal(getMapConfidenceInfluence("lotus"), 1);
+  assert.equal(getMapConfidenceInfluence("bind"), 0);
   assert.equal(getMapConfidenceInfluence("summit"), 0.75);
   assert.equal(getMapConfidenceInfluence("abyss"), 0.45);
+  // Sova carries a weight on both Haven (high confidence) and Abyss (low), so
+  // the same agent shows the dampening without changing maps mid-comparison.
   const sova = AGENTS.find((agent) => agent.id === "sova");
-  const highWeight = createMapCandidateWeight({ mapId: "ascent", strength: 4 })(sova);
+  const highWeight = createMapCandidateWeight({ mapId: "haven", strength: 4 })(sova);
   const lowWeight = createMapCandidateWeight({ mapId: "abyss", strength: 4 })(sova);
-  assert.equal(highWeight, 1.5 ** 4);
+  assert.equal(highWeight, 1.43 ** 4);
   assert.equal(lowWeight, 1 + (1.5 ** 4 - 1) * 0.45);
   assert.ok(highWeight > lowWeight);
   assert.ok(lowWeight > 1);
@@ -121,7 +124,7 @@ test("Map Smart visibly favours the map's leading agents", () => {
 });
 
 test("high- and low-confidence Map Smart both preserve roulette variety", () => {
-  const shipped = sample({ mapStrength: MAP_STRENGTH, mapId: "ascent" });
+  const shipped = sample({ mapStrength: MAP_STRENGTH, mapId: "lotus" });
   const dampened = sample({ mapStrength: MAP_STRENGTH, mapId: "abyss" });
   assert.ok(
     shipped.inPlay >= 20,
@@ -139,7 +142,7 @@ test("weights order candidates but never make an unowned agent legal", () => {
     { id: "p2", name: "p2", ownedAgentIds: new Set(["sova", "jett"]) },
   ];
   const candidateWeight = createMapCandidateWeight({
-    mapId: "ascent",
+    mapId: "lotus",
     strength: MAP_STRENGTH,
   });
   for (let trial = 0; trial < 200; trial += 1) {
@@ -164,7 +167,7 @@ test("storage's mirrored STRUCTURE_MAX cannot drift from game data", () => {
 });
 
 test("saves made before the slider migrate onto the matching stop", () => {
-  const options = { agents: AGENTS, validMapIds: ["ascent"] };
+  const options = { agents: AGENTS, validMapIds: ["lotus"] };
   const migrated = (preferredMode) =>
     normalizeSavedPreferences({ preferredMode }, options).preferredStructure;
   assert.equal(migrated("chaos"), 0);

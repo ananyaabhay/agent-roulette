@@ -33,6 +33,16 @@ jobs:
           echo "status=$?" >> "$GITHUB_OUTPUT"
           cat data-health.txt
 
+      # A failed check previously skipped the issue step and still went green,
+      # so an upstream outage looked identical to a healthy result.
+      - name: Fail loudly when the check itself could not run
+        if: steps.check.outputs.status != '0' && steps.check.outputs.status != '2'
+        run: |
+          echo "::error::check-game-data.js exited ${{ steps.check.outputs.status }}."
+          echo "No drift could be assessed, so this run proves nothing about the data."
+          cat data-health.txt
+          exit 1
+
       - name: Open, update, or close the data health issue
         if: steps.check.outputs.status == '0' || steps.check.outputs.status == '2'
         uses: actions/github-script@v7

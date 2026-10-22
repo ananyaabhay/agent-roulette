@@ -1130,6 +1130,16 @@ function renderMapIntel() {
   }
   const intel = getMapIntel(selectedMapId);
   if (!intel) return;
+
+  // A map that rotated in since the last snapshot has no ranking to show.
+  // Saying so beats rendering an empty list.
+  if (intel.confidence === "none") {
+    body.append(element("h4", "map-intel-label", "No snapshot yet"));
+    body.append(element("p", "", intel.intel));
+    body.append(element("p", "", describeMapEvidence(selectedMapId)));
+    return;
+  }
+
   body.append(element("h4", "map-intel-label", "Agents seen most often"));
   const observed = element("ol", "map-ranking");
   observedAgentNames(selectedMapId).forEach((name) => {

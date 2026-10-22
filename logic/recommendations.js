@@ -231,6 +231,9 @@ export const MAP_EVIDENCE_CAVEAT =
 export function describeMapEvidence(mapId) {
   const intel = getMapIntel(mapId);
   if (!intel) return "";
+  if (intel.confidence === "none") {
+    return `No pick-rate snapshot has been taken for ${intel.map.name} yet, so Map Smart leaves this map alone. Role targets, ownership and unique-agent rules all still apply.`;
+  }
   if (intel.confidence === "high") {
     return `This snapshot includes ${intel.sampleSize} pro matches, giving the ranking a stronger evidence base.`;
   }

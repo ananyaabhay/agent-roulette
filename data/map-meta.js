@@ -2,6 +2,12 @@
  * Local, reviewable Map Smart inputs. Pick rates are rounded snapshots from
  * RIB.gg's public map-filtered Agent Stats table on 2026-08-31. Weights are
  * deliberately modest: they order legal candidates, never create legality.
+ *
+ * This version dates the STATS, not the map pool — see MAP_POOL_VERSION in
+ * data/maps.js. The pool moved to 13.08 on 13 Oct 2026 while these stats are
+ * still the 13.04 snapshot, which is exactly what the drift check should keep
+ * reporting until someone refreshes them. Maps added by a rotation carry
+ * confidence "none" until they have their own snapshot.
  */
 export const MAP_META_VERSION = "13.04-2026-08-31";
 export const MAP_META_UPDATED_AT = "2026-08-31";
@@ -18,12 +24,25 @@ export const MAP_META = Object.freeze({
     observed: [["sova", 100], ["astra", 57.7], ["waylay", 57.7], ["yoru", 53.8]],
     intel: "A small post-rotation sample strongly features Sova; Astra, Waylay, Yoru, Harbor, and Omen are lighter signals.",
   }),
-  ascent: freezeMap({
-    confidence: "high",
-    sampleSize: 434,
-    agentWeights: { sova: 1.5, omen: 1.46, cypher: 1.3, jett: 1.28, phoenix: 1.25, kayo: 1.1 },
-    observed: [["sova", 97.5], ["omen", 94.2], ["cypher", 62.2], ["jett", 60.8]],
-    intel: "Sova and Omen dominate the observed core, with Cypher and the leading Duelists providing the next strongest signals.",
+  bind: freezeMap({
+    // Rotated into Competitive with patch 13.08 on 13 Oct 2026. The RIB.gg
+    // snapshot predates that, so there is no pick-rate data for this map yet
+    // and inventing some would defeat the point of a dated snapshot.
+    confidence: "none",
+    sampleSize: 0,
+    agentWeights: {},
+    observed: [],
+    intel: "Bind returned to the pool in patch 13.08. No pick-rate snapshot has been taken since, so Map Smart has nothing to work with here.",
+  }),
+  corrode: freezeMap({
+    // Also back in with 13.08, and reworked in the same patch — defender
+    // rotations, mid and A site all changed. Pre-rework data would describe a
+    // map that no longer exists.
+    confidence: "none",
+    sampleSize: 0,
+    agentWeights: {},
+    observed: [],
+    intel: "Corrode returned in patch 13.08 and was substantially reworked in the same patch. Any earlier data would describe a different map.",
   }),
   haven: freezeMap({
     confidence: "high",
@@ -39,14 +58,6 @@ export const MAP_META = Object.freeze({
     rolePairWeights: { Initiator: 1.06 },
     observed: [["omen", 97.9], ["fade", 86.6], ["raze", 72.4], ["vyse", 63.4]],
     intel: "Omen and Fade lead a stable observed core. A second Initiator is possible, but remains a light preference rather than a rule.",
-  }),
-  split: freezeMap({
-    confidence: "high",
-    sampleSize: 532,
-    agentWeights: { viper: 1.42, omen: 1.38, raze: 1.25, fade: 1.23, neon: 1.21, skye: 1.2 },
-    rolePairWeights: { Controller: 1.08, Initiator: 1.14 },
-    observed: [["viper", 87.6], ["omen", 81.6], ["raze", 57.1], ["fade", 51.9], ["skye", 48.5]],
-    intel: "Viper and Omen are both common, while Fade and Skye make double-Initiator structures a credible option.",
   }),
   summit: freezeMap({
     confidence: "medium",
