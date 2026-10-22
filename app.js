@@ -1117,6 +1117,7 @@ function renderMode() {
   const stop = resolveStructure(structurePosition);
   const range = $("#structureRange");
   if (Number(range.value) !== stop.position) range.value = String(stop.position);
+  range.style.setProperty("--structure-fill", `${(stop.position / STRUCTURE_MAX) * 100}%`);
   range.setAttribute("aria-valuetext", stop.label);
   $("#modeDescription").textContent =
     stop.id === "map" && !selectedMapId
@@ -1670,6 +1671,9 @@ function setStructure(nextPosition) {
   }
 }
 
+$("#structureRange").addEventListener("input", (event) => {
+  event.target.style.setProperty("--structure-fill", `${(Number(event.target.value) / STRUCTURE_MAX) * 100}%`);
+});
 $("#structureRange").addEventListener("change", (event) => {
   setStructure(event.target.value);
 });

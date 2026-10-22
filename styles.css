@@ -958,6 +958,7 @@ button:disabled {
 }
 
 .structure-range {
+  --structure-fill: 50%;
   width: 100%;
   min-height: 44px;
   margin: 0;
@@ -974,13 +975,13 @@ button:disabled {
   background:
     radial-gradient(circle at 2px 50%, var(--rule-hard) 2px, transparent 2px) left / 50% 100% no-repeat,
     radial-gradient(circle at 50% 50%, var(--rule-hard) 2px, transparent 2px) center / 100% 100% no-repeat,
-    linear-gradient(to right, var(--accent-dark), var(--accent));
+    linear-gradient(to right, var(--accent) var(--structure-fill), var(--rule-hard) var(--structure-fill));
 }
 
 .structure-range::-moz-range-track {
   height: 4px;
   border-radius: 2px;
-  background: linear-gradient(to right, var(--accent-dark), var(--accent));
+  background: linear-gradient(to right, var(--accent) var(--structure-fill), var(--rule-hard) var(--structure-fill));
 }
 
 .structure-range::-webkit-slider-thumb {
