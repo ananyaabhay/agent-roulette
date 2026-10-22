@@ -825,6 +825,11 @@ button:disabled {
   font-size: 12px;
 }
 
+.agent-tag-sep {
+  color: var(--quiet);
+  font-size: 11px;
+}
+
 .agent-tag-role {
   font-family: var(--mono);
   font-size: 9px;

@@ -51,7 +51,8 @@ export function rateToWeight(rate) {
   return Math.round((1 + (rate / 100) * (WEIGHT_CEILING - 1)) * 100) / 100;
 }
 
-export function confidenceFor(sampleSize) {
+export function confidenceFor(sampleSize, { unknown = false } = {}) {
+  if (unknown) return "unstated";
   if (sampleSize >= 400) return "high";
   if (sampleSize >= 100) return "medium";
   return "low";
@@ -59,6 +60,18 @@ export function confidenceFor(sampleSize) {
 
 const normalize = (value) =>
   String(value).toLowerCase().replace(/[^a-z0-9]/g, "");
+
+/**
+ * Which pasted column holds what. Stats sites all lay their tables out
+ * differently — vstats leads with rank and role icons, vlr with the agent —
+ * so the file declares its own layout instead of the parser guessing.
+ * Only "agent" plus at least one rate column is used; the rest are ignored.
+ */
+function parseColumns(spec) {
+  return String(spec)
+    .split(/[,\t]+/)
+    .map((name) => name.trim().toLowerCase().replace(/[^a-z]/g, ""));
+}
 
 export function parseRawTable(text, { fileName, agents = AGENTS } = {}) {
   const byName = new Map(agents.map((agent) => [normalize(agent.name), agent]));
@@ -77,22 +90,42 @@ export function parseRawTable(text, { fileName, agents = AGENTS } = {}) {
     }
     if (trimmed.startsWith("#")) return;
 
-    const cells = trimmed.split(/\t|\s{2,}|,/).map((cell) => cell.trim());
-    const name = cells[0];
-    const rate = Number.parseFloat(String(cells[1]).replace("%", ""));
+    const cells = trimmed.split(/\t|\s{2,}/).map((cell) => cell.trim());
+    const columns = meta.columns ? parseColumns(meta.columns) : ["agent", "pickrate"];
+    const cellFor = (key) => {
+      const at = columns.indexOf(key);
+      return at >= 0 ? cells[at] : undefined;
+    };
+    const toRate = (value) =>
+      Number.parseFloat(String(value ?? "").replace("%", "").trim());
 
+    const name = cellFor("agent");
     const agent = byName.get(normalize(name));
     if (!agent) {
       problems.push(`${fileName} line ${index + 1}: unknown agent "${name}"`);
       return;
     }
+
+    const pickRate = toRate(cellFor("pickrate"));
+    const winRate = toRate(cellFor("winrate"));
+    // Win rate is the better signal — an agent picked 30% of the time with a
+    // 60% win rate says something different from one picked 90% at 48% — so
+    // it is used when the table has it, and pick rate is the fallback.
+    const rate = Number.isFinite(winRate) ? winRate : pickRate;
+
     if (!Number.isFinite(rate) || rate < 0 || rate > 100) {
       problems.push(
-        `${fileName} line ${index + 1}: "${cells[1]}" is not a pick rate between 0 and 100`,
+        `${fileName} line ${index + 1}: no usable rate for ${agent.name} ` +
+          `(looked for "${columns.includes("winrate") ? "winrate" : "pickrate"}")`,
       );
       return;
     }
-    rows.push({ agent, rate });
+    rows.push({
+      agent,
+      rate,
+      pickRate: Number.isFinite(pickRate) ? pickRate : null,
+      winRate: Number.isFinite(winRate) ? winRate : null,
+    });
   });
 
   for (const key of ["patch", "date", "sample", "source", "population"]) {
@@ -100,13 +133,18 @@ export function parseRawTable(text, { fileName, agents = AGENTS } = {}) {
   }
   if (!rows.length) problems.push(`${fileName}: no agent rows found`);
 
-  const sampleSize = Number.parseInt(meta.sample, 10);
-  if (meta.sample && !Number.isFinite(sampleSize)) {
-    problems.push(`${fileName}: "# sample:" must be a number of games`);
+  // Not every site publishes how many games are behind a table. Saying
+  // "unknown" is honest; inventing a number is not.
+  const unknownSample = /^unknown$/i.test(String(meta.sample || "").trim());
+  const sampleSize = unknownSample ? 0 : Number.parseInt(meta.sample, 10);
+  if (meta.sample && !unknownSample && !Number.isFinite(sampleSize)) {
+    problems.push(
+      `${fileName}: "# sample:" must be a number of games, or "unknown"`,
+    );
   }
 
   rows.sort((left, right) => right.rate - left.rate);
-  return { meta: { ...meta, sampleSize }, rows, problems };
+  return { meta: { ...meta, sampleSize, unknownSample }, rows, problems };
 }
 
 export function buildMapEntry({ meta, rows }, existing = {}) {
@@ -118,13 +156,14 @@ export function buildMapEntry({ meta, rows }, existing = {}) {
     });
 
   return {
+    rateBasis: rows.some((row) => row.winRate != null) ? "win rate" : "pick rate",
     // rolePairWeights are a hand-made judgement (Split wants two Controllers),
     // not something a pick-rate table contains, so a refresh carries them over
     // rather than quietly deleting them.
     ...(existing.rolePairWeights
       ? { rolePairWeights: existing.rolePairWeights }
       : {}),
-    confidence: confidenceFor(meta.sampleSize),
+    confidence: confidenceFor(meta.sampleSize, { unknown: meta.unknownSample }),
     sampleSize: meta.sampleSize,
     agentWeights: weights,
     observed: rows.slice(0, TOP_N).map((row) => ({ agentId: row.agent.id })),

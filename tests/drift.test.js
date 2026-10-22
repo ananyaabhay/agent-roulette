@@ -29,6 +29,7 @@ import {
   createMapCandidateWeight,
   getMapConfidenceInfluence,
   MAP_EVIDENCE_CAVEAT,
+  MAP_CONFIDENCE_INFLUENCE,
   mapEvidenceCaveat,
   buildLineupNotes,
   describeMapEvidence,
@@ -452,9 +453,11 @@ test("the next-agent banner counts down, flips, and retires itself", () => {
   assert.equal(at("2026-10-22").state, "upcoming");
   assert.equal(at("2026-10-22").days, 5);
   assert.match(at("2026-10-26").headline, /arrives tomorrow/);
+  assert.equal(at("2026-10-23").days, 4, "the countdown must tick down daily");
   assert.equal(at("2026-10-27").state, "arrived");
-  assert.equal(at("2026-11-02").state, "arrived");
-  // Past the grace window it stops nagging on its own.
+  assert.match(at("2026-10-27").headline, /is here/);
+  assert.equal(at("2026-11-10").state, "arrived", "should still mark the launch");
+  // Three weeks of "she's here", then it retires itself.
   assert.equal(at("2026-11-20"), null);
 });
 
@@ -487,7 +490,7 @@ test("a raw table is rejected rather than half-read", () => {
 
   const bad = parseRawTable("Nobody\t90\nOmen\t900\n", { fileName: "x.tsv" });
   assert.ok(bad.problems.some((line) => /unknown agent "Nobody"/.test(line)));
-  assert.ok(bad.problems.some((line) => /not a pick rate/.test(line)));
+  assert.ok(bad.problems.some((line) => /no usable rate for Omen/.test(line)));
   assert.ok(bad.problems.some((line) => /missing "# patch:"/.test(line)));
 });
 
@@ -520,4 +523,47 @@ test("evidence copy follows the table's population, not an assumption", () => {
     }
     assert.ok(caveat.length > 0, `${mapId} showed no caveat`);
   }
+});
+
+test("a pasted table declares its own column layout", () => {
+  // vstats leads with rank and a role icon; vlr leads with the agent.
+  const vstats = parseRawTable(
+    [
+      "# patch: 13.08",
+      "# date: 2026-10-22",
+      "# sample: unknown",
+      "# source: https://www.vstats.gg/",
+      "# population: ranked ladder",
+      "# columns: rank, role, agent, winrate, roundwr, pickrate, kd, performance",
+      "1\tController\tClove\t54.69%\t52.40%\t50.42%\t0.96\t278.96",
+      "2\tSentinel\tSage\t53.21%\t51.87%\t27.65%\t0.92\t232.56",
+    ].join("\n"),
+    { fileName: "lotus.tsv" },
+  );
+  assert.deepEqual(vstats.problems, []);
+  assert.equal(vstats.rows.length, 2);
+  assert.equal(vstats.rows[0].agent.id, "clove");
+  // Win rate wins when the table has both.
+  assert.equal(vstats.rows[0].rate, 54.69);
+  assert.equal(vstats.rows[0].pickRate, 50.42);
+  assert.equal(vstats.meta.unknownSample, true);
+});
+
+test("a table with no published sample size cannot claim high confidence", () => {
+  assert.equal(confidenceFor(0, { unknown: true }), "unstated");
+  assert.ok(MAP_CONFIDENCE_INFLUENCE.unstated <= MAP_CONFIDENCE_INFLUENCE.low);
+});
+
+test("the launch is marked even after the roster catches up", () => {
+  const withHush = [...AGENTS, { name: "Hush", role: "Duelist" }];
+  const at = (day) =>
+    getUpcomingAgentNotice({
+      now: new Date(`${day}T06:00:00Z`),
+      localAgents: withHush,
+    });
+  // Announcing her before release would be wrong — she can't be owned yet.
+  assert.equal(at("2026-10-22"), null);
+  assert.equal(at("2026-10-27").state, "arrived");
+  assert.match(at("2026-10-27").detail, /in the roulette now/);
+  assert.equal(at("2026-11-25"), null);
 });

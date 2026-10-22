@@ -3,8 +3,8 @@ import { UPCOMING_AGENTS } from "../data/upcoming.js";
 
 const DAY_IN_MS = 24 * 60 * 60 * 1000;
 
-/** How long the "she's here now" message lingers before the banner retires. */
-export const ARRIVED_GRACE_DAYS = 14;
+/** How long the "she's here" message lingers before the banner retires. */
+export const ARRIVED_GRACE_DAYS = 21;
 
 function daysUntil(releaseDate, now) {
   const release = Date.parse(`${releaseDate}T00:00:00Z`);
@@ -30,9 +30,12 @@ export function getUpcomingAgentNotice({
   const known = new Set(localAgents.map((agent) => agent.name.toLowerCase()));
 
   for (const agent of upcoming) {
-    if (known.has(agent.name.toLowerCase())) continue;
-
+    const inRoster = known.has(agent.name.toLowerCase());
     const days = daysUntil(agent.releaseDate, now);
+
+    // Before release she cannot be in the roster, so being there early would
+    // be a mistake — stay quiet rather than announce it.
+    if (inRoster && days > 0) continue;
     if (days > 0) {
       return {
         ...agent,
@@ -47,12 +50,17 @@ export function getUpcomingAgentNotice({
     }
 
     if (days > -ARRIVED_GRACE_DAYS) {
+      // Three weeks of "she's here", whether or not the roster has caught up,
+      // then it retires itself. A launch is worth marking; a banner that is
+      // still marking it in December is not.
       return {
         ...agent,
         state: "arrived",
         days,
-        headline: `${agent.name} is live`,
-        detail: `${agent.name} released on ${agent.releaseDate} and isn't in this build yet. She'll appear once the roster is updated — unlock her in game first either way.`,
+        headline: `${agent.name} is here`,
+        detail: inRoster
+          ? `${agent.name} is in the roulette now. Unlock her in game, then tick her on your roster so she can be drawn.`
+          : `${agent.name} released on ${agent.releaseDate} and isn't in this build yet. She'll appear once the roster is updated.`,
       };
     }
   }

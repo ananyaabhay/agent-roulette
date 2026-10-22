@@ -1098,6 +1098,7 @@ function summaryAgentRow(label, entries) {
   entries.forEach(({ name, role }) => {
     const tag = element("span", "agent-tag");
     tag.append(element("strong", "", name));
+    tag.append(element("span", "agent-tag-sep", "·"));
     tag.append(element("span", "agent-tag-role", role));
     group.append(tag);
   });

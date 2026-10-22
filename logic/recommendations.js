@@ -16,6 +16,10 @@ export const MAP_CONFIDENCE_INFLUENCE = Object.freeze({
   high: 1,
   medium: 0.75,
   low: 0.45,
+  // A table that doesn't publish its sample size can't earn more than the
+  // weakest band — we have no way to know whether it rests on 20 games or
+  // 20,000.
+  unstated: 0.45,
 });
 
 export function getMapIntel(mapId) {
@@ -251,6 +255,10 @@ function describePopulation(intel) {
 export function describeMapEvidence(mapId) {
   const intel = getMapIntel(mapId);
   if (!intel) return "";
+  if (intel.confidence === "unstated") {
+    const basis = intel.rateBasis || "pick rate";
+    return `This ${basis} table does not publish how many games are behind it, so treat the order as a hint rather than a measurement.`;
+  }
   if (intel.confidence === "none") {
     return `No pick-rate snapshot has been taken for ${intel.map.name} yet, so Map Smart leaves this map alone. Role targets, ownership and unique-agent rules all still apply.`;
   }
