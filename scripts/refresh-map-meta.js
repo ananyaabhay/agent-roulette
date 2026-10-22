@@ -38,17 +38,35 @@ import {
 const RAW_DIR = new URL("../data/raw/", import.meta.url);
 const OUT_FILE = new URL("../data/map-meta.js", import.meta.url);
 
-/**
- * Pick rate to candidate weight. Deliberately a straight line: a 100% agent
- * lands at WEIGHT_CEILING, a 0% agent at 1.0, nothing in between is special.
- * Anything cleverer would be a model nobody could check against the table.
- */
 const WEIGHT_CEILING = 1.5;
-const MIN_RATE = 25;
+/** An agent needs this much play before its rate means anything. */
+const MIN_PICK_RATE = 10;
 const TOP_N = 4;
 
-export function rateToWeight(rate) {
-  return Math.round((1 + (rate / 100) * (WEIGHT_CEILING - 1)) * 100) / 100;
+/**
+ * Rates become weights by their position within this table, not by their
+ * absolute value.
+ *
+ * Pick rates span nearly the whole range, but win rates cluster between about
+ * 45% and 55% — so mapping 0-100 onto the weight range flattened every agent
+ * to within a few hundredths of each other and Map Smart stopped doing
+ * anything. Normalising across the table keeps the ordering the table states
+ * and spends the full weight range on it.
+ */
+export function ratesToWeights(rows, ceiling = WEIGHT_CEILING) {
+  if (!rows.length) return new Map();
+  const values = rows.map((row) => row.rate);
+  const low = Math.min(...values);
+  const high = Math.max(...values);
+  const span = high - low;
+  return new Map(
+    rows.map((row) => [
+      row.agent.id,
+      span === 0
+        ? 1
+        : Math.round((1 + ((row.rate - low) / span) * (ceiling - 1)) * 100) / 100,
+    ]),
+  );
 }
 
 export function confidenceFor(sampleSize, { unknown = false } = {}) {
@@ -90,8 +108,14 @@ export function parseRawTable(text, { fileName, agents = AGENTS } = {}) {
     }
     if (trimmed.startsWith("#")) return;
 
-    const cells = trimmed.split(/\t|\s{2,}/).map((cell) => cell.trim());
     const columns = meta.columns ? parseColumns(meta.columns) : ["agent", "pickrate"];
+    // A table copied out of a browser can arrive tab-separated or
+    // space-separated depending on the site and the paste. With an explicit
+    // column list, any run of whitespace is a boundary; no agent name
+    // contains a space, KAY/O included.
+    const cells = (meta.columns ? trimmed.split(/\s+/) : trimmed.split(/\t|\s{2,}/))
+      .map((cell) => cell.trim())
+      .filter(Boolean);
     const cellFor = (key) => {
       const at = columns.indexOf(key);
       return at >= 0 ? cells[at] : undefined;
@@ -148,12 +172,18 @@ export function parseRawTable(text, { fileName, agents = AGENTS } = {}) {
 }
 
 export function buildMapEntry({ meta, rows }, existing = {}) {
-  const weights = {};
-  rows
-    .filter((row) => row.rate >= MIN_RATE)
-    .forEach((row) => {
-      weights[row.agent.id] = rateToWeight(row.rate);
-    });
+  // Win rate on an agent nobody picks is a tiny sample wearing a big number,
+  // so pick rate decides who is in at all even when win rate does the ranking.
+  const eligible = rows.filter(
+    (row) => row.pickRate == null || row.pickRate >= MIN_PICK_RATE,
+  );
+  const weights = Object.fromEntries(ratesToWeights(eligible));
+
+  // "Seen most often" has to mean seen most often. Killjoy can top a win-rate
+  // table on 9% pick rate; saying she is the most-seen agent would be false.
+  const seenMostOften = rows.some((row) => row.pickRate != null)
+    ? [...rows].sort((left, right) => right.pickRate - left.pickRate)
+    : rows;
 
   return {
     rateBasis: rows.some((row) => row.winRate != null) ? "win rate" : "pick rate",
@@ -166,7 +196,7 @@ export function buildMapEntry({ meta, rows }, existing = {}) {
     confidence: confidenceFor(meta.sampleSize, { unknown: meta.unknownSample }),
     sampleSize: meta.sampleSize,
     agentWeights: weights,
-    observed: rows.slice(0, TOP_N).map((row) => ({ agentId: row.agent.id })),
+    observed: seenMostOften.slice(0, TOP_N).map((row) => ({ agentId: row.agent.id })),
     intel: meta.intel || "",
     source: meta.source,
     population: meta.population,

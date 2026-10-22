@@ -4,201 +4,309 @@
 // editing: npm run refresh:maps
 import { MAP_BY_ID } from "./maps.js";
 
-export const MAP_META_VERSION = "13.04-2026-08-31";
-export const MAP_META_UPDATED_AT = "2026-08-31";
+export const MAP_META_VERSION = "13.08-2026-10-23";
+export const MAP_META_UPDATED_AT = "2026-10-23";
 
 export const MAP_META_SOURCES = Object.freeze({
   "rotation": "https://playvalorant.com/en-gb/news/game-updates/valorant-patch-notes-13-04/",
-  "agentStats": "https://www.rib.gg/"
+  "agentStats": "https://www.vstats.gg/"
 });
 
 const freezeMap = (value) => Object.freeze(value);
 
 export const MAP_META = Object.freeze({
-  abyss: freezeMap({
-      "confidence": "low",
-      "sampleSize": 26,
+  abyss: freezeMap(
+    // from data/raw/abyss.tsv · https://www.vstats.gg/
+    {
+      "rateBasis": "win rate",
+      "rolePairWeights": {},
+      "confidence": "unstated",
+      "sampleSize": 0,
       "agentWeights": {
-        "sova": 1.5,
-        "astra": 1.27,
-        "waylay": 1.25,
-        "yoru": 1.22,
-        "harbor": 1.18,
-        "omen": 1.16
+        "clove": 1.5,
+        "sage": 1.39,
+        "sova": 1.34,
+        "phoenix": 1.27,
+        "jett": 1.27,
+        "neon": 1.23,
+        "chamber": 1.23,
+        "reyna": 1.23,
+        "cypher": 1.22,
+        "waylay": 1.2,
+        "skye": 1.19,
+        "fade": 1.18,
+        "raze": 1.18,
+        "miks": 1.17,
+        "yoru": 1.1,
+        "omen": 1
       },
       "observed": [
         {
-          "agentId": "sova",
-          "pickRate": 100
+          "agentId": "jett"
         },
         {
-          "agentId": "astra",
-          "pickRate": 57.7
+          "agentId": "reyna"
         },
         {
-          "agentId": "waylay",
-          "pickRate": 57.7
+          "agentId": "clove"
         },
         {
-          "agentId": "yoru",
-          "pickRate": 53.8
+          "agentId": "chamber"
         }
       ],
-      "intel": "A small post-rotation sample strongly features Sova; Astra, Waylay, Yoru, Harbor, and Omen are lighter signals.",
-      "rolePairWeights": {}
+      "intel": "",
+      "population": "ranked ladder"
     }),
-  bind: freezeMap({
-      "confidence": "none",
+  bind: freezeMap(
+    // from data/raw/bind.tsv · https://www.vstats.gg/
+    {
+      "rateBasis": "win rate",
+      "rolePairWeights": {},
+      "confidence": "unstated",
       "sampleSize": 0,
-      "agentWeights": {},
-      "observed": [],
-      "intel": "Bind returned to the pool in patch 13.08. No pick-rate snapshot has been taken since, so Map Smart has nothing to work with here.",
-      "rolePairWeights": {}
-    }),
-  corrode: freezeMap({
-      "confidence": "none",
-      "sampleSize": 0,
-      "agentWeights": {},
-      "observed": [],
-      "intel": "Corrode returned in patch 13.08 and was substantially reworked in the same patch. Any earlier data would describe a different map.",
-      "rolePairWeights": {}
-    }),
-  haven: freezeMap({
-      "confidence": "high",
-      "sampleSize": 584,
       "agentWeights": {
-        "omen": 1.45,
-        "sova": 1.43,
-        "neon": 1.32,
-        "phoenix": 1.28,
+        "clove": 1.5,
+        "sage": 1.48,
+        "raze": 1.34,
+        "phoenix": 1.32,
+        "sova": 1.3,
+        "cypher": 1.29,
+        "brimstone": 1.27,
+        "fade": 1.26,
+        "skye": 1.25,
+        "reyna": 1.24,
+        "jett": 1.24,
+        "chamber": 1.18,
+        "neon": 1.17,
+        "miks": 1.16,
+        "yoru": 1.15,
+        "omen": 1
+      },
+      "observed": [
+        {
+          "agentId": "clove"
+        },
+        {
+          "agentId": "reyna"
+        },
+        {
+          "agentId": "jett"
+        },
+        {
+          "agentId": "chamber"
+        }
+      ],
+      "intel": "",
+      "population": "ranked ladder"
+    }),
+  corrode: freezeMap(
+    // from data/raw/corrode.tsv · https://www.vstats.gg/
+    {
+      "rateBasis": "win rate",
+      "rolePairWeights": {},
+      "confidence": "unstated",
+      "sampleSize": 0,
+      "agentWeights": {
+        "clove": 1.5,
+        "sage": 1.37,
+        "phoenix": 1.29,
+        "fade": 1.28,
+        "deadlock": 1.25,
+        "neon": 1.25,
         "cypher": 1.25,
-        "fade": 1.08
+        "sova": 1.24,
+        "raze": 1.23,
+        "reyna": 1.22,
+        "jett": 1.21,
+        "skye": 1.21,
+        "chamber": 1.17,
+        "waylay": 1.16,
+        "miks": 1.14,
+        "yoru": 1.1,
+        "omen": 1
       },
       "observed": [
         {
-          "agentId": "omen",
-          "pickRate": 86.6
+          "agentId": "clove"
         },
         {
-          "agentId": "sova",
-          "pickRate": 85.1
+          "agentId": "reyna"
         },
         {
-          "agentId": "neon",
-          "pickRate": 73.6
+          "agentId": "jett"
         },
         {
-          "agentId": "phoenix",
-          "pickRate": 66.6
+          "agentId": "chamber"
         }
       ],
-      "intel": "Omen and Sova form the strongest observed signals, followed by mobile Duelists and Cypher.",
-      "rolePairWeights": {}
+      "intel": "",
+      "population": "ranked ladder"
+    }),
+  haven: freezeMap(
+    // from data/raw/haven.tsv · https://www.vstats.gg/
+    {
+      "rateBasis": "win rate",
+      "rolePairWeights": {},
+      "confidence": "unstated",
+      "sampleSize": 0,
+      "agentWeights": {
+        "clove": 1.5,
+        "sage": 1.41,
+        "killjoy": 1.37,
+        "phoenix": 1.32,
+        "sova": 1.31,
+        "cypher": 1.28,
+        "jett": 1.25,
+        "raze": 1.21,
+        "fade": 1.21,
+        "reyna": 1.2,
+        "neon": 1.19,
+        "skye": 1.19,
+        "miks": 1.19,
+        "chamber": 1.13,
+        "omen": 1
+      },
+      "observed": [
+        {
+          "agentId": "jett"
+        },
+        {
+          "agentId": "clove"
+        },
+        {
+          "agentId": "sova"
+        },
+        {
+          "agentId": "reyna"
+        }
+      ],
+      "intel": "",
+      "population": "ranked ladder"
     }),
   lotus: freezeMap(
-    // from data/raw/lotus.tsv · https://www.rib.gg/
+    // from data/raw/lotus.tsv · https://www.vstats.gg/
     {
-      "confidence": "high",
-      "sampleSize": 634,
+      "rateBasis": "win rate",
+      "confidence": "unstated",
+      "sampleSize": 0,
       "agentWeights": {
-        "omen": 1.49,
-        "killjoy": 1.44,
-        "fade": 1.31,
-        "raze": 1.29,
-        "viper": 1.16
+        "clove": 1.5,
+        "sage": 1.41,
+        "fade": 1.29,
+        "raze": 1.28,
+        "phoenix": 1.28,
+        "sova": 1.24,
+        "reyna": 1.21,
+        "neon": 1.21,
+        "cypher": 1.21,
+        "skye": 1.2,
+        "jett": 1.2,
+        "chamber": 1.19,
+        "miks": 1.11,
+        "omen": 1
       },
       "observed": [
         {
-          "agentId": "omen"
+          "agentId": "chamber"
         },
         {
-          "agentId": "killjoy"
+          "agentId": "clove"
         },
         {
-          "agentId": "fade"
+          "agentId": "reyna"
         },
         {
-          "agentId": "raze"
+          "agentId": "jett"
         }
       ],
-      "intel": "Three sites and rotating doors, so smokes stretch further than on a two-site map.",
-      "population": "professional"
+      "intel": "Three sites, so a second Controller earns its keep.",
+      "population": "ranked ladder"
     }),
-  summit: freezeMap({
-      "confidence": "medium",
-      "sampleSize": 224,
-      "agentWeights": {
-        "fade": 1.34,
-        "neon": 1.31,
-        "omen": 1.29,
-        "cypher": 1.23,
-        "phoenix": 1.14,
-        "sova": 1.12
-      },
+  summit: freezeMap(
+    // from data/raw/summit.tsv · https://www.vstats.gg/
+    {
+      "rateBasis": "win rate",
       "rolePairWeights": {
         "Initiator": 1.12
       },
+      "confidence": "unstated",
+      "sampleSize": 0,
+      "agentWeights": {
+        "clove": 1.5,
+        "sage": 1.41,
+        "cypher": 1.29,
+        "raze": 1.27,
+        "sova": 1.25,
+        "phoenix": 1.25,
+        "fade": 1.24,
+        "neon": 1.24,
+        "jett": 1.22,
+        "skye": 1.2,
+        "reyna": 1.2,
+        "chamber": 1.18,
+        "waylay": 1.15,
+        "miks": 1.13,
+        "omen": 1
+      },
       "observed": [
         {
-          "agentId": "fade",
-          "pickRate": 64.7
+          "agentId": "clove"
         },
         {
-          "agentId": "neon",
-          "pickRate": 60.7
+          "agentId": "reyna"
         },
         {
-          "agentId": "omen",
-          "pickRate": 59.8
+          "agentId": "jett"
         },
         {
-          "agentId": "cypher",
-          "pickRate": 46
-        },
-        {
-          "agentId": "sova",
-          "pickRate": 22.3
+          "agentId": "chamber"
         }
       ],
-      "intel": "The newer-map sample favours Fade, Neon, Omen, and Cypher; Sova gives a meaningful second Initiator signal."
+      "intel": "",
+      "population": "ranked ladder"
     }),
-  sunset: freezeMap({
-      "confidence": "high",
-      "sampleSize": 302,
-      "agentWeights": {
-        "omen": 1.48,
-        "neon": 1.38,
-        "sova": 1.29,
-        "cypher": 1.24,
-        "chamber": 1.16,
-        "fade": 1.15
-      },
+  sunset: freezeMap(
+    // from data/raw/sunset.tsv · https://www.vstats.gg/
+    {
+      "rateBasis": "win rate",
       "rolePairWeights": {
         "Initiator": 1.12
       },
+      "confidence": "unstated",
+      "sampleSize": 0,
+      "agentWeights": {
+        "clove": 1.5,
+        "sage": 1.43,
+        "phoenix": 1.29,
+        "sova": 1.28,
+        "cypher": 1.25,
+        "gekko": 1.25,
+        "fade": 1.25,
+        "jett": 1.24,
+        "raze": 1.24,
+        "neon": 1.23,
+        "reyna": 1.22,
+        "skye": 1.2,
+        "chamber": 1.19,
+        "miks": 1.15,
+        "omen": 1
+      },
       "observed": [
         {
-          "agentId": "omen",
-          "pickRate": 98
+          "agentId": "clove"
         },
         {
-          "agentId": "neon",
-          "pickRate": 82.8
+          "agentId": "reyna"
         },
         {
-          "agentId": "sova",
-          "pickRate": 62.6
+          "agentId": "jett"
         },
         {
-          "agentId": "cypher",
-          "pickRate": 57.3
-        },
-        {
-          "agentId": "fade",
-          "pickRate": 33.1
+          "agentId": "chamber"
         }
       ],
-      "intel": "Omen and Neon are the clearest signals. Sova plus Fade makes a two-Initiator result a supported possibility."
+      "intel": "",
+      "population": "ranked ladder"
     }),
 });
 

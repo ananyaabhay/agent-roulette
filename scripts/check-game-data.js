@@ -218,8 +218,11 @@ export function analyzeDataHealth({
 
   const roster = compareAgentRoster({ upstreamAgents, localAgents });
   const missingAgents = roster.additions.map((agent) => agent.displayName);
+  // "unstated" is a table that never published its game count, which is at
+  // least as weak as a small counted sample — it must not slip through.
+  const WEAK_CONFIDENCE = new Set(["low", "unstated", "none"]);
   const lowConfidenceMapIds = Object.entries(mapMeta)
-    .filter(([, meta]) => meta.confidence === "low")
+    .filter(([, meta]) => WEAK_CONFIDENCE.has(meta.confidence))
     .map(([mapId]) => mapId)
     .sort();
   const lowConfidenceMaps = lowConfidenceMapIds.map(mapName);

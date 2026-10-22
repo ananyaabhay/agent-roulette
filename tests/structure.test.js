@@ -13,6 +13,8 @@ import {
   createMapCandidateWeight,
   getMapConfidenceInfluence,
 } from "../logic/recommendations.js";
+import { MAP_CONFIDENCE_INFLUENCE } from "../logic/recommendations.js";
+import { MAP_META } from "../data/map-meta.js";
 import { solveDraft, validateDraft } from "../logic/solver.js";
 import {
   normalizeSavedPreferences,
@@ -98,33 +100,54 @@ test("strength 0 produces no weighting at all", () => {
 });
 
 test("confidence transparently dampens configured influence toward neutral", () => {
-  assert.equal(getMapConfidenceInfluence("lotus"), 1);
-  assert.equal(getMapConfidenceInfluence("bind"), 0);
-  assert.equal(getMapConfidenceInfluence("summit"), 0.75);
-  assert.equal(getMapConfidenceInfluence("abyss"), 0.45);
+  // Assert the bands, not which map currently sits in which — the snapshot is
+  // meant to be replaced, and naming maps here breaks on every refresh.
+  assert.equal(MAP_CONFIDENCE_INFLUENCE.high, 1);
+  assert.equal(MAP_CONFIDENCE_INFLUENCE.medium, 0.75);
+  assert.equal(MAP_CONFIDENCE_INFLUENCE.low, 0.45);
+  // A table with no published sample size can never outrank a counted one.
+  assert.ok(MAP_CONFIDENCE_INFLUENCE.unstated <= MAP_CONFIDENCE_INFLUENCE.low);
+  for (const [mapId, meta] of Object.entries(MAP_META)) {
+    assert.equal(
+      getMapConfidenceInfluence(mapId),
+      MAP_CONFIDENCE_INFLUENCE[meta.confidence] ?? 0,
+      `${mapId} influence does not follow its confidence band`,
+    );
+  }
   // Sova carries a weight on both Haven (high confidence) and Abyss (low), so
   // the same agent shows the dampening without changing maps mid-comparison.
-  const sova = AGENTS.find((agent) => agent.id === "sova");
-  const highWeight = createMapCandidateWeight({ mapId: "haven", strength: 4 })(sova);
-  const lowWeight = createMapCandidateWeight({ mapId: "abyss", strength: 4 })(sova);
-  assert.equal(highWeight, 1.43 ** 4);
-  assert.equal(lowWeight, 1 + (1.5 ** 4 - 1) * 0.45);
-  assert.ok(highWeight > lowWeight);
-  assert.ok(lowWeight > 1);
+  // Dampening must move a weight toward neutral, never above its raw value.
+  const [mapId, meta] = Object.entries(MAP_META).find(
+    ([, value]) => Object.keys(value.agentWeights).length > 0,
+  );
+  const [leaderId, rawWeight] = Object.entries(meta.agentWeights).sort(
+    (left, right) => right[1] - left[1],
+  )[0];
+  const leader = AGENTS.find((agent) => agent.id === leaderId);
+  const weighted = createMapCandidateWeight({ mapId, strength: 4 })(leader);
+  const undampened = rawWeight ** 4;
+  assert.ok(weighted > 1, "dampening flattened the weight entirely");
+  assert.ok(weighted <= undampened, "dampening raised the weight");
 });
 
 test("Map Smart visibly favours the map's leading agents", () => {
-  // The V1.4 setting moved Omen from 17% to 24%, which read as inert.
-  const baseline = sample({ mapStrength: 0 });
-  const shipped = sample({ mapStrength: MAP_STRENGTH });
+  // Whichever agent the table ranks highest — naming one in the test would
+  // break every time the snapshot is refreshed, which is the point of the
+  // snapshot being refreshable.
+  const leader = Object.entries(MAP_META.haven.agentWeights).sort(
+    (left, right) => right[1] - left[1],
+  )[0][0];
+  // The V1.4 setting moved the leader from 17% to 24%, which read as inert.
+  const baseline = sample({ mapStrength: 0, mapId: "haven" });
+  const shipped = sample({ mapStrength: MAP_STRENGTH, mapId: "haven" });
   assert.ok(
-    shipped.rate("omen") > baseline.rate("omen") + 0.2,
-    `expected a visible shift, got ${baseline.rate("omen").toFixed(2)} -> ${shipped.rate("omen").toFixed(2)}`,
+    shipped.rate(leader) > baseline.rate(leader) + 0.2,
+    `expected a visible shift for ${leader}, got ${baseline.rate(leader).toFixed(2)} -> ${shipped.rate(leader).toFixed(2)}`,
   );
 });
 
 test("high- and low-confidence Map Smart both preserve roulette variety", () => {
-  const shipped = sample({ mapStrength: MAP_STRENGTH, mapId: "lotus" });
+  const shipped = sample({ mapStrength: MAP_STRENGTH, mapId: "haven" });
   const dampened = sample({ mapStrength: MAP_STRENGTH, mapId: "abyss" });
   assert.ok(
     shipped.inPlay >= 20,
