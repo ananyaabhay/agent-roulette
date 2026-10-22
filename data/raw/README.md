@@ -1,7 +1,7 @@
 # Raw pick-rate tables
 
-One `<mapId>.tsv` per map. Pasted the agent table from a stats site, add the
-header block, run `npm run refresh:maps`.
+One `<mapId>.tsv` per map. Pasted the agent table from a stats site, added the
+header block --> ran `npm run refresh:maps`.
 
 Both files are committed — the paste and the generated `map-meta.js` — so every
 number in the app traces back to a table somebody actually looked at, and a
