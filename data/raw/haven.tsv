@@ -1,0 +1,35 @@
+# patch: 13.08
+# date: 2026-10-23
+# sample: unknown
+# source: https://www.vstats.gg/
+# population: ranked ladder
+# columns: rank, role, agent, winrate, roundwr, pickrate, kd, performance
+1 Controller Clove 54.56% 52.34% 51.34% 0.95 277.73
+2 Sentinel Sage 53.05% 51.89% 29.37% 0.92 232.31
+3 Sentinel Killjoy 52.23% 51.56% 12.97% 1.00 252.60
+4 Initiator Gekko 51.43% 51.20% 7.81% 0.90 229.40
+5 Duelist Phoenix 51.39% 51.18% 28.27% 1.05 269.87
+6 Initiator Sova 51.18% 51.15% 46.61% 0.99 257.92
+7 Sentinel Cypher 50.70% 51.00% 21.56% 1.01 257.64
+8 Sentinel Deadlock 50.27% 50.81% 5.05% 0.96 237.99
+9 Duelist Jett 50.15% 50.80% 54.02% 1.06 267.36
+10 Controller Brimstone 50.11% 50.58% 8.36% 0.96 263.80
+11 Sentinel Veto 50.00% 50.18% 2.67% 1.02 259.09
+12 Duelist Waylay 49.78% 50.75% 7.33% 0.98 253.06
+13 Duelist Raze 49.56% 50.60% 13.94% 1.01 268.99
+14 Initiator Breach 49.54% 50.72% 5.24% 0.94 247.51
+15 Initiator Fade 49.46% 50.51% 10.91% 0.92 239.13
+16 Duelist Reyna 49.26% 50.58% 46.02% 1.06 264.70
+17 Duelist Neon 49.18% 50.52% 20.13% 0.97 256.79
+18 Initiator Skye 49.10% 50.45% 11.80% 0.91 235.92
+19 Controller Miks 49.05% 50.48% 14.05% 0.92 255.33
+20 Sentinel Vyse 48.63% 50.27% 2.24% 0.98 257.51
+21 Initiator Tejo 48.54% 50.34% 5.74% 0.92 231.38
+22 Duelist Yoru 48.34% 50.05% 8.39% 1.00 252.08
+23 Sentinel Chamber 48.11% 50.12% 43.60% 1.09 265.66
+24 Duelist Iso 48.10% 49.96% 7.16% 0.99 262.90
+25 Controller Viper 47.22% 49.59% 1.52% 0.97 247.00
+26 Controller Astra 46.66% 49.33% 2.22% 1.02 253.81
+27 Initiator KAY/O 46.54% 49.61% 6.27% 0.90 257.83
+28 Controller Omen 45.81% 49.33% 24.41% 0.98 255.27
+29 Controller Harbor 45.62% 49.30% 1.00% 0.91 242.32
