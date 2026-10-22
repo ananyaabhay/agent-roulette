@@ -11,7 +11,7 @@ refresh shows up in the diff as both the source and its effect.
 
 - **vstats.gg** — ranked ladder, filterable by map and rank. Closest to how most
   people actually play. Use `# population: ranked ladder`.
-- ** [Not using] vlr.gg** — professional, broken down per event per map. Use
+- **[Not using] vlr.gg** — professional, broken down per event per map. Use
   `# population: professional` and name the event in `# source:`.
 
 Neither has a public API. Riot's official endpoints return matches, not
