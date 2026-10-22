@@ -12,7 +12,7 @@ import {
   STARTER_AGENT_IDS,
 } from "./data/game-data.js";
 import { getAgentVisualPath } from "./data/agent-visuals.js";
-import { MAPS, MAP_BY_ID, MAP_IDS } from "./data/maps.js";
+import { MAPS, MAP_BY_ID, MAP_IDS, MAP_POOL_VERSION } from "./data/maps.js";
 import {
   explainFailure,
   getAvailableAgents,
@@ -1032,8 +1032,12 @@ function renderTeamNeeds() {
   const required = needs.filter((need) =>
     ["needed", "impossible"].includes(need.state),
   );
-  const covered = needs
-    .flatMap((need) => need.coveringLobbyAgents.map((agent) => `${agent.name} · ${need.role}`));
+  const covered = needs.flatMap((need) =>
+    need.coveringLobbyAgents.map((agent) => ({
+      name: agent.name,
+      role: need.role,
+    })),
+  );
   signal.textContent = advisory
     ? "Reference only"
     : required.length
@@ -1051,7 +1055,7 @@ function renderTeamNeeds() {
     ),
   );
   if (covered.length) {
-    summary.append(summaryRow("Covered outside", covered.join(" · ")));
+    summary.append(summaryAgentRow("Covered outside", covered));
   }
   summary.append(
     summaryRow(
@@ -1079,6 +1083,25 @@ function renderTeamNeeds() {
     row.append(state);
     teamNeedsElement.append(row);
   });
+}
+
+/**
+ * Agent plus role as one unit. A flat separator list reads as six unrelated
+ * words to anyone who doesn't already know the roster, so the name carries the
+ * emphasis and the role sits beside it as a tag.
+ */
+function summaryAgentRow(label, entries) {
+  const row = element("div", "summary-row");
+  row.append(element("span", "", label));
+  const group = element("div", "agent-tags");
+  entries.forEach(({ name, role }) => {
+    const tag = element("span", "agent-tag");
+    tag.append(element("strong", "", name));
+    tag.append(element("span", "agent-tag-role", role));
+    group.append(tag);
+  });
+  row.append(group);
+  return row;
 }
 
 function summaryRow(label, value) {
@@ -1171,7 +1194,10 @@ function renderMapIntel() {
   }).format(new Date(`${intel.updatedAt}T00:00:00Z`));
   source.append(
     document.createTextNode(
-      `Last updated on ${snapshotDate} · Snapshot patch ${intel.version.split("-")[0]} · `,
+      `Pick rates: patch ${intel.version.split("-")[0]} snapshot, ${snapshotDate}` +
+        (intel.version.split("-")[0] === MAP_POOL_VERSION
+          ? " · "
+          : ` · map pool is now ${MAP_POOL_VERSION}, so these predate the rotation · `),
     ),
   );
   const link = element("a", "", "Public Agent Stats source");
@@ -1333,7 +1359,10 @@ function renderResults(assignment, options = {}) {
     pinButton.setAttribute("aria-pressed", pinned ? "true" : "false");
     actions.append(pinButton);
     const personalRemaining = getPersonalRerollsRemaining(matchState, player.id);
-    const rerollButton = actionButton(`Reroll · ${personalRemaining}`, "token");
+    const rerollButton = actionButton(
+      personalRemaining > 0 ? `Reroll · ${personalRemaining} left` : "No rerolls left",
+      "token",
+    );
     rerollButton.dataset.action = "reroll";
     rerollButton.dataset.playerId = player.id;
     rerollButton.disabled = pinned || personalRemaining <= 0;

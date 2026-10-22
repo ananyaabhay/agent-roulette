@@ -9,6 +9,11 @@ import {
 } from "../data/game-data.js";
 import { MAP_META } from "../data/map-meta.js";
 import { MAPS } from "../data/maps.js";
+import {
+  confidenceFor,
+  parseRawTable,
+  rateToWeight,
+} from "../scripts/refresh-map-meta.js";
 import { UPCOMING_AGENTS } from "../data/upcoming.js";
 import { getUpcomingAgentNotice } from "../logic/upcoming.js";
 import {
@@ -458,4 +463,41 @@ test("the banner disappears the moment the agent reaches local data", () => {
     localAgents: [...AGENTS, { name: "Hush", role: "Duelist" }],
   });
   assert.equal(notice, null);
+});
+
+test("pick rates map onto weights in a straight, checkable line", () => {
+  assert.equal(rateToWeight(100), 1.5);
+  assert.equal(rateToWeight(0), 1);
+  assert.equal(rateToWeight(50), 1.25);
+  assert.equal(confidenceFor(634), "high");
+  assert.equal(confidenceFor(224), "medium");
+  assert.equal(confidenceFor(26), "low");
+});
+
+test("a raw table is rejected rather than half-read", () => {
+  const good = parseRawTable(
+    "# patch: 13.08\n# date: 2026-10-22\n# sample: 400\n# source: x\n# population: ranked ladder\nOmen\t90\nKAY/O\t40\n",
+    { fileName: "lotus.tsv" },
+  );
+  assert.deepEqual(good.problems, []);
+  assert.equal(good.rows.length, 2);
+  // KAY/O's slash is the name that breaks naive matching.
+  assert.ok(good.rows.some((row) => row.agent.id === "kayo"));
+
+  const bad = parseRawTable("Nobody\t90\nOmen\t900\n", { fileName: "x.tsv" });
+  assert.ok(bad.problems.some((line) => /unknown agent "Nobody"/.test(line)));
+  assert.ok(bad.problems.some((line) => /not a pick rate/.test(line)));
+  assert.ok(bad.problems.some((line) => /missing "# patch:"/.test(line)));
+});
+
+test("a map with no table keeps whatever data it already had", () => {
+  // The migration is one map at a time; a refresh must never blank the rest.
+  for (const map of MAPS) {
+    const entry = MAP_META[map.id];
+    assert.ok(entry, `${map.id} lost its entry`);
+    if (entry.confidence !== "none") {
+      assert.ok(Object.keys(entry.agentWeights).length > 0);
+      assert.ok(entry.sampleSize > 0);
+    }
+  }
 });

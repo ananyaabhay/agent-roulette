@@ -802,6 +802,36 @@ button:disabled {
   background: rgba(255, 255, 255, 0.018);
 }
 
+/* name carries the weight, role rides alongside as a tag — a flat
+   "Raze · Duelist · KAY/O · Initiator" list is unreadable to a newcomer */
+.agent-tags {
+  display: flex;
+  flex-wrap: wrap;
+  gap: 6px;
+  justify-content: flex-end;
+}
+
+.agent-tag {
+  display: inline-flex;
+  align-items: baseline;
+  gap: 6px;
+  padding: 3px 8px;
+  border: 1px solid var(--rule);
+  background: var(--panel-soft);
+}
+
+.agent-tag strong {
+  font-size: 12px;
+}
+
+.agent-tag-role {
+  font-family: var(--mono);
+  font-size: 9px;
+  letter-spacing: 0.1em;
+  text-transform: uppercase;
+  color: var(--quiet);
+}
+
 .summary-row {
   display: grid;
   grid-template-columns: 128px minmax(0, 1fr);

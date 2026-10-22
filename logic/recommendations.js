@@ -65,8 +65,8 @@ export function createMapCandidateWeight({
     let configuredWeight = (meta.agentWeights[agent.id] || 1) ** strength;
     const accountedRoleCount =
       (roleCounts[agent.role] || 0) + outsideRoleCounts[agent.role];
-    if (accountedRoleCount === 1 && meta.rolePairWeights[agent.role]) {
-      configuredWeight *= meta.rolePairWeights[agent.role] ** strength;
+    if (accountedRoleCount === 1 && (meta.rolePairWeights || {})[agent.role]) {
+      configuredWeight *= (meta.rolePairWeights || {})[agent.role] ** strength;
     }
     return 1 + (configuredWeight - 1) * confidenceInfluence;
   };

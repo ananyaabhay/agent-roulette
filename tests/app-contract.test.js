@@ -97,3 +97,24 @@ test("metadata, favicon, focus styles, reduced motion, and mobile targets are wi
   assert.match(cssSource, /prefers-reduced-motion/);
   assert.match(cssSource, /min-height: 44px/);
 });
+
+test("agent name and role are rendered as a unit, not a flat separator list", async () => {
+  const appSource = await readFile(new URL("../app.js", import.meta.url), "utf8");
+  // "Raze · Duelist · KAY/O · Initiator" gave a newcomer no way to tell a name
+  // from a category, so the pair is now one tag.
+  assert.doesNotMatch(appSource, /\$\{agent\.name\} · \$\{need\.role\}/);
+  assert.match(appSource, /summaryAgentRow/);
+  assert.match(appSource, /agent-tag-role/);
+});
+
+test("the snapshot line says when the stats predate the current map pool", async () => {
+  const appSource = await readFile(new URL("../app.js", import.meta.url), "utf8");
+  assert.match(appSource, /predate the rotation/);
+  assert.match(appSource, /MAP_POOL_VERSION/);
+});
+
+test("the reroll button says what its number counts", async () => {
+  const appSource = await readFile(new URL("../app.js", import.meta.url), "utf8");
+  assert.match(appSource, /Reroll · \$\{personalRemaining\} left/);
+  assert.match(appSource, /No rerolls left/);
+});

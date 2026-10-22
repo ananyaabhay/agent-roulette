@@ -3,5 +3,5 @@ export const AGENT_VISUAL_SOURCE =
   "https://developer.riotgames.com/docs/valorant#assets";
 
 export function getAgentVisualPath(agentId) {
-  return `./assets/agents/${agentId}.png`;
+  return `./assets/agents/${agentId}.webp`;
 }
