@@ -1732,3 +1732,57 @@ if (storageRecoveryNotice) {
     true,
   );
 }
+
+
+/* ─── NEXT AGENT ──────────────────────────────────────────────────────
+   Announced-but-unreleased agents stay out of AGENTS, so people kept
+   asking where the new one was. This answers that, counts down, and
+   retires itself — see logic/upcoming.js.
+   ─────────────────────────────────────────────────────────────────── */
+const UPCOMING_DISMISS_KEY = "agent-roulette:upcoming-dismissed";
+
+function renderUpcomingAgent() {
+  const banner = $("#upcomingBanner");
+  const notice = getUpcomingAgentNotice();
+  if (!notice) {
+    banner.hidden = true;
+    return;
+  }
+
+  let dismissed = null;
+  try {
+    dismissed = localStorage.getItem(UPCOMING_DISMISS_KEY);
+  } catch (error) {
+    dismissed = null;
+  }
+  // Dismissal is keyed to the state, so "arrives in 5 days" being dismissed
+  // does not also silence "Hush is live" a week later.
+  if (dismissed === `${notice.id}:${notice.state}`) {
+    banner.hidden = true;
+    return;
+  }
+
+  $("#upcomingHeadline").textContent = notice.headline;
+  $("#upcomingDetail").textContent = notice.detail;
+  const link = $("#upcomingTrailer");
+  if (notice.trailerUrl) {
+    link.href = notice.trailerUrl;
+    link.textContent = "Watch the trailer";
+    link.hidden = false;
+  } else {
+    link.hidden = true;
+  }
+  banner.dataset.state = notice.state;
+  banner.hidden = false;
+
+  $("#upcomingDismiss").onclick = () => {
+    banner.hidden = true;
+    try {
+      localStorage.setItem(UPCOMING_DISMISS_KEY, `${notice.id}:${notice.state}`);
+    } catch (error) {
+      /* a dismissal that cannot persist is not worth failing over */
+    }
+  };
+}
+
+renderUpcomingAgent();

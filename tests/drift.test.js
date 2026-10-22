@@ -9,6 +9,8 @@ import {
 } from "../data/game-data.js";
 import { MAP_META } from "../data/map-meta.js";
 import { MAPS } from "../data/maps.js";
+import { UPCOMING_AGENTS } from "../data/upcoming.js";
+import { getUpcomingAgentNotice } from "../logic/upcoming.js";
 import {
   analyzeDataHealth,
   decideIssueAction,
@@ -422,4 +424,38 @@ test("maps without a snapshot apply no map influence at any strength", () => {
       AGENTS.forEach((agent) => assert.equal(weight(agent), 1));
     }
   }
+});
+
+test("an announced agent stays out of the playable roster", () => {
+  const names = new Set(AGENTS.map((agent) => agent.name.toLowerCase()));
+  UPCOMING_AGENTS.forEach((agent) => {
+    assert.ok(
+      !names.has(agent.name.toLowerCase()),
+      `${agent.name} is announced but already in AGENTS — rosters default to ` +
+        "everything selected, so she would be dealt to people who cannot pick her",
+    );
+    assert.match(agent.releaseDate, /^\d{4}-\d{2}-\d{2}$/);
+    assert.match(agent.trailerUrl, /^https:\/\//);
+  });
+});
+
+test("the next-agent banner counts down, flips, and retires itself", () => {
+  const at = (day) =>
+    getUpcomingAgentNotice({ now: new Date(`${day}T06:00:00Z`) });
+
+  assert.equal(at("2026-10-22").state, "upcoming");
+  assert.equal(at("2026-10-22").days, 5);
+  assert.match(at("2026-10-26").headline, /arrives tomorrow/);
+  assert.equal(at("2026-10-27").state, "arrived");
+  assert.equal(at("2026-11-02").state, "arrived");
+  // Past the grace window it stops nagging on its own.
+  assert.equal(at("2026-11-20"), null);
+});
+
+test("the banner disappears the moment the agent reaches local data", () => {
+  const notice = getUpcomingAgentNotice({
+    now: new Date("2026-10-22T06:00:00Z"),
+    localAgents: [...AGENTS, { name: "Hush", role: "Duelist" }],
+  });
+  assert.equal(notice, null);
 });
