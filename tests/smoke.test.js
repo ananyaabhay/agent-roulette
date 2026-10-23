@@ -178,8 +178,16 @@ test("team needs states a status instead of repeating the role list", async () =
   assert.match($("#teamNeeds").textContent, /Duelist · Initiator · Controller · Sentinel/);
 });
 
-test("the feedback link stays hidden until a form URL is configured", async () => {
+test("the feedback link shows only when a form URL is configured", async () => {
+  const appSource = await readFile(new URL("../app.js", import.meta.url), "utf8");
+  const url = appSource.match(/const FEEDBACK_URL = "([^"]*)";/)?.[1];
+  assert.notEqual(url, undefined, "FEEDBACK_URL is missing from app.js");
   const { $ } = await bootPage();
-  assert.equal($("#feedbackEntry").hidden, true);
-  assert.equal($("#feedbackLink").hasAttribute("href"), false);
+  if (/^https:\/\//.test(url)) {
+    assert.equal($("#feedbackEntry").hidden, false);
+    assert.equal($("#feedbackLink").getAttribute("href"), url);
+  } else {
+    assert.equal($("#feedbackEntry").hidden, true);
+    assert.equal($("#feedbackLink").hasAttribute("href"), false);
+  }
 });

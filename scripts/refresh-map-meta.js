@@ -132,15 +132,15 @@ export function parseRawTable(text, { fileName, agents = AGENTS } = {}) {
 
     const pickRate = toRate(cellFor("pickrate"));
     const winRate = toRate(cellFor("winrate"));
-    // Win rate is the better signal — an agent picked 30% of the time with a
-    // 60% win rate says something different from one picked 90% at 48% — so
-    // it is used when the table has it, and pick rate is the fallback.
-    const rate = Number.isFinite(winRate) ? winRate : pickRate;
+    // Pick rate decides the weights, so Map Smart favours the same agents the
+    // "seen most often" list shows. Win rate is kept only as a fallback for a
+    // table that has no pick-rate column.
+    const rate = Number.isFinite(pickRate) ? pickRate : winRate;
 
     if (!Number.isFinite(rate) || rate < 0 || rate > 100) {
       problems.push(
         `${fileName} line ${index + 1}: no usable rate for ${agent.name} ` +
-          `(looked for "${columns.includes("winrate") ? "winrate" : "pickrate"}")`,
+          `(looked for "${columns.includes("pickrate") ? "pickrate" : "winrate"}")`,
       );
       return;
     }
@@ -186,7 +186,7 @@ export function buildMapEntry({ meta, rows }, existing = {}) {
     : rows;
 
   return {
-    rateBasis: rows.some((row) => row.winRate != null) ? "win rate" : "pick rate",
+    rateBasis: rows.some((row) => row.pickRate != null) ? "pick rate" : "win rate",
     // rolePairWeights are a hand-made judgement (Split wants two Controllers),
     // not something a pick-rate table contains, so a refresh carries them over
     // rather than quietly deleting them.

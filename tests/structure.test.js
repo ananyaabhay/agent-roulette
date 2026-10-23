@@ -131,18 +131,19 @@ test("confidence transparently dampens configured influence toward neutral", () 
 });
 
 test("Map Smart visibly favours the map's leading agents", () => {
-  // Whichever agent the table ranks highest — naming one in the test would
-  // break every time the snapshot is refreshed, which is the point of the
-  // snapshot being refreshable.
-  const leader = Object.entries(MAP_META.haven.agentWeights).sort(
-    (left, right) => right[1] - left[1],
-  )[0][0];
+  // Measure the agents the panel names, whichever they are — naming one in
+  // the test would break every time the snapshot is refreshed. Weights rank
+  // by pick rate, so the top few are near-tied and the lift is shared across
+  // them; asserting on the single leader no longer reflects what users see.
+  const listed = MAP_META.haven.observed.map(({ agentId }) => agentId);
+  const average = (result) =>
+    listed.reduce((sum, agentId) => sum + result.rate(agentId), 0) / listed.length;
   // The V1.4 setting moved the leader from 17% to 24%, which read as inert.
-  const baseline = sample({ mapStrength: 0, mapId: "haven" });
-  const shipped = sample({ mapStrength: MAP_STRENGTH, mapId: "haven" });
+  const baseline = average(sample({ mapStrength: 0, mapId: "haven" }));
+  const shipped = average(sample({ mapStrength: MAP_STRENGTH, mapId: "haven" }));
   assert.ok(
-    shipped.rate(leader) > baseline.rate(leader) + 0.2,
-    `expected a visible shift for ${leader}, got ${baseline.rate(leader).toFixed(2)} -> ${shipped.rate(leader).toFixed(2)}`,
+    shipped > baseline + 0.12,
+    `expected a visible shift for ${listed.join(", ")}, got ${baseline.toFixed(2)} -> ${shipped.toFixed(2)}`,
   );
 });
 

@@ -18,27 +18,27 @@ export const MAP_META = Object.freeze({
   abyss: freezeMap(
     // from data/raw/abyss.tsv · https://www.vstats.gg/
     {
-      "rateBasis": "win rate",
+      "rateBasis": "pick rate",
       "rolePairWeights": {},
       "confidence": "unstated",
       "sampleSize": 0,
       "agentWeights": {
-        "clove": 1.5,
-        "sage": 1.39,
-        "sova": 1.34,
-        "phoenix": 1.27,
-        "jett": 1.27,
-        "neon": 1.23,
-        "chamber": 1.23,
-        "reyna": 1.23,
-        "cypher": 1.22,
-        "waylay": 1.2,
-        "skye": 1.19,
-        "fade": 1.18,
-        "raze": 1.18,
-        "miks": 1.17,
-        "yoru": 1.1,
-        "omen": 1
+        "jett": 1.5,
+        "reyna": 1.41,
+        "clove": 1.41,
+        "chamber": 1.41,
+        "sova": 1.41,
+        "sage": 1.22,
+        "omen": 1.15,
+        "phoenix": 1.11,
+        "cypher": 1.07,
+        "neon": 1.07,
+        "miks": 1.05,
+        "waylay": 1.04,
+        "raze": 1.03,
+        "yoru": 1,
+        "skye": 1,
+        "fade": 1
       },
       "observed": [
         {
@@ -60,27 +60,27 @@ export const MAP_META = Object.freeze({
   bind: freezeMap(
     // from data/raw/bind.tsv · https://www.vstats.gg/
     {
-      "rateBasis": "win rate",
+      "rateBasis": "pick rate",
       "rolePairWeights": {},
       "confidence": "unstated",
       "sampleSize": 0,
       "agentWeights": {
         "clove": 1.5,
-        "sage": 1.48,
-        "raze": 1.34,
-        "phoenix": 1.32,
-        "sova": 1.3,
-        "cypher": 1.29,
-        "brimstone": 1.27,
-        "fade": 1.26,
-        "skye": 1.25,
-        "reyna": 1.24,
-        "jett": 1.24,
-        "chamber": 1.18,
-        "neon": 1.17,
-        "miks": 1.16,
-        "yoru": 1.15,
-        "omen": 1
+        "reyna": 1.48,
+        "jett": 1.43,
+        "chamber": 1.42,
+        "raze": 1.4,
+        "sage": 1.26,
+        "skye": 1.24,
+        "cypher": 1.21,
+        "phoenix": 1.19,
+        "fade": 1.17,
+        "brimstone": 1.13,
+        "omen": 1.11,
+        "sova": 1.06,
+        "neon": 1.06,
+        "miks": 1.04,
+        "yoru": 1
       },
       "observed": [
         {
@@ -102,28 +102,28 @@ export const MAP_META = Object.freeze({
   corrode: freezeMap(
     // from data/raw/corrode.tsv · https://www.vstats.gg/
     {
-      "rateBasis": "win rate",
+      "rateBasis": "pick rate",
       "rolePairWeights": {},
       "confidence": "unstated",
       "sampleSize": 0,
       "agentWeights": {
         "clove": 1.5,
-        "sage": 1.37,
-        "phoenix": 1.29,
-        "fade": 1.28,
-        "deadlock": 1.25,
-        "neon": 1.25,
-        "cypher": 1.25,
-        "sova": 1.24,
-        "raze": 1.23,
-        "reyna": 1.22,
-        "jett": 1.21,
-        "skye": 1.21,
-        "chamber": 1.17,
-        "waylay": 1.16,
-        "miks": 1.14,
-        "yoru": 1.1,
-        "omen": 1
+        "reyna": 1.45,
+        "jett": 1.42,
+        "chamber": 1.36,
+        "fade": 1.36,
+        "sage": 1.26,
+        "phoenix": 1.19,
+        "omen": 1.17,
+        "neon": 1.12,
+        "cypher": 1.08,
+        "waylay": 1.07,
+        "raze": 1.06,
+        "miks": 1.06,
+        "sova": 1.05,
+        "skye": 1.03,
+        "deadlock": 1.01,
+        "yoru": 1
       },
       "observed": [
         {
@@ -145,26 +145,26 @@ export const MAP_META = Object.freeze({
   haven: freezeMap(
     // from data/raw/haven.tsv · https://www.vstats.gg/
     {
-      "rateBasis": "win rate",
+      "rateBasis": "pick rate",
       "rolePairWeights": {},
       "confidence": "unstated",
       "sampleSize": 0,
       "agentWeights": {
-        "clove": 1.5,
-        "sage": 1.41,
-        "killjoy": 1.37,
-        "phoenix": 1.32,
-        "sova": 1.31,
-        "cypher": 1.28,
-        "jett": 1.25,
-        "raze": 1.21,
-        "fade": 1.21,
-        "reyna": 1.2,
-        "neon": 1.19,
-        "skye": 1.19,
-        "miks": 1.19,
-        "chamber": 1.13,
-        "omen": 1
+        "jett": 1.5,
+        "clove": 1.47,
+        "sova": 1.41,
+        "reyna": 1.41,
+        "chamber": 1.38,
+        "sage": 1.21,
+        "phoenix": 1.2,
+        "omen": 1.16,
+        "cypher": 1.12,
+        "neon": 1.11,
+        "miks": 1.04,
+        "raze": 1.04,
+        "killjoy": 1.02,
+        "skye": 1.01,
+        "fade": 1
       },
       "observed": [
         {
@@ -186,24 +186,24 @@ export const MAP_META = Object.freeze({
   lotus: freezeMap(
     // from data/raw/lotus.tsv · https://www.vstats.gg/
     {
-      "rateBasis": "win rate",
+      "rateBasis": "pick rate",
       "confidence": "unstated",
       "sampleSize": 0,
       "agentWeights": {
-        "clove": 1.5,
-        "sage": 1.41,
-        "fade": 1.29,
-        "raze": 1.28,
-        "phoenix": 1.28,
-        "sova": 1.24,
-        "reyna": 1.21,
-        "neon": 1.21,
-        "cypher": 1.21,
-        "skye": 1.2,
-        "jett": 1.2,
-        "chamber": 1.19,
-        "miks": 1.11,
-        "omen": 1
+        "chamber": 1.5,
+        "clove": 1.47,
+        "reyna": 1.4,
+        "jett": 1.39,
+        "fade": 1.34,
+        "raze": 1.24,
+        "sage": 1.2,
+        "omen": 1.16,
+        "neon": 1.13,
+        "phoenix": 1.13,
+        "miks": 1.06,
+        "skye": 1.04,
+        "cypher": 1,
+        "sova": 1
       },
       "observed": [
         {
@@ -225,7 +225,7 @@ export const MAP_META = Object.freeze({
   summit: freezeMap(
     // from data/raw/summit.tsv · https://www.vstats.gg/
     {
-      "rateBasis": "win rate",
+      "rateBasis": "pick rate",
       "rolePairWeights": {
         "Initiator": 1.12
       },
@@ -233,20 +233,20 @@ export const MAP_META = Object.freeze({
       "sampleSize": 0,
       "agentWeights": {
         "clove": 1.5,
-        "sage": 1.41,
-        "cypher": 1.29,
-        "raze": 1.27,
-        "sova": 1.25,
-        "phoenix": 1.25,
-        "fade": 1.24,
-        "neon": 1.24,
-        "jett": 1.22,
-        "skye": 1.2,
-        "reyna": 1.2,
-        "chamber": 1.18,
-        "waylay": 1.15,
-        "miks": 1.13,
-        "omen": 1
+        "reyna": 1.44,
+        "jett": 1.43,
+        "chamber": 1.36,
+        "fade": 1.33,
+        "sage": 1.33,
+        "phoenix": 1.21,
+        "neon": 1.15,
+        "cypher": 1.13,
+        "omen": 1.13,
+        "miks": 1.07,
+        "raze": 1.06,
+        "sova": 1.05,
+        "skye": 1.03,
+        "waylay": 1
       },
       "observed": [
         {
@@ -268,7 +268,7 @@ export const MAP_META = Object.freeze({
   sunset: freezeMap(
     // from data/raw/sunset.tsv · https://www.vstats.gg/
     {
-      "rateBasis": "win rate",
+      "rateBasis": "pick rate",
       "rolePairWeights": {
         "Initiator": 1.12
       },
@@ -276,20 +276,20 @@ export const MAP_META = Object.freeze({
       "sampleSize": 0,
       "agentWeights": {
         "clove": 1.5,
-        "sage": 1.43,
-        "phoenix": 1.29,
-        "sova": 1.28,
-        "cypher": 1.25,
-        "gekko": 1.25,
-        "fade": 1.25,
-        "jett": 1.24,
-        "raze": 1.24,
-        "neon": 1.23,
-        "reyna": 1.22,
-        "skye": 1.2,
-        "chamber": 1.19,
-        "miks": 1.15,
-        "omen": 1
+        "reyna": 1.4,
+        "jett": 1.39,
+        "chamber": 1.34,
+        "sage": 1.24,
+        "sova": 1.24,
+        "phoenix": 1.2,
+        "neon": 1.12,
+        "omen": 1.12,
+        "cypher": 1.11,
+        "raze": 1.09,
+        "fade": 1.04,
+        "miks": 1.03,
+        "skye": 1.01,
+        "gekko": 1
       },
       "observed": [
         {

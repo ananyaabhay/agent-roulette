@@ -400,7 +400,12 @@ test("remembered maps produce zero map-result commentary outside Map Smart", () 
 });
 
 test("Map Smart Notes classify map-favoured, constraint-led, and wildcard outcomes", () => {
-  const lineup = ["omen", "gekko", "chamber"].map((id) =>
+  // One agent with no Haven weight guarantees a wildcard, whatever the
+  // snapshot currently favours.
+  const unweighted = AGENTS.find(
+    (agent) => !(agent.id in MAP_META.haven.agentWeights),
+  ).id;
+  const lineup = [unweighted, "gekko", "chamber"].map((id) =>
     AGENTS.find((agent) => agent.id === id),
   );
   const reasons = buildLineupNotes({
@@ -589,8 +594,8 @@ test("a pasted table declares its own column layout", () => {
   assert.deepEqual(vstats.problems, []);
   assert.equal(vstats.rows.length, 2);
   assert.equal(vstats.rows[0].agent.id, "clove");
-  // Win rate wins when the table has both.
-  assert.equal(vstats.rows[0].rate, 54.69);
+  // Pick rate wins when the table has both.
+  assert.equal(vstats.rows[0].rate, 50.42);
   assert.equal(vstats.rows[0].pickRate, 50.42);
   assert.equal(vstats.meta.unknownSample, true);
 });

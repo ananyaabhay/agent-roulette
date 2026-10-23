@@ -39,7 +39,6 @@ import {
   mapEvidenceCaveat,
   describeMapEvidence,
   observedAgentNames,
-  favouredAgentNames,
 } from "./logic/recommendations.js";
 import { formatDiscordResult } from "./logic/discord.js";
 import {
@@ -1197,7 +1196,7 @@ function renderMapIntel() {
     element(
       "p",
       "map-influence",
-      `Map Smart leans hardest toward ${new Intl.ListFormat("en", { type: "conjunction" }).format(favouredAgentNames(selectedMapId))}, the best win rates among agents picked often here. That makes them more likely, not guaranteed: a pick still has to be owned, unique, and fit a role the team needs. Influence is ${Math.round(getMapConfidenceInfluence(selectedMapId) * 100)}% because ${intel.confidence === "unstated" ? "this table doesn’t say how many games it covers" : `this snapshot has ${intel.confidence} confidence`}.`,
+      `Map Smart makes these agents more likely to roll, not guaranteed: a pick still has to be owned, unique, and fit a role the team needs. Influence is ${Math.round(getMapConfidenceInfluence(selectedMapId) * 100)}% because ${intel.confidence === "unstated" ? "this table doesn’t say how many games it covers" : `this snapshot has ${intel.confidence} confidence`}.`,
     ),
   );
   const source = element("p", "map-source");
