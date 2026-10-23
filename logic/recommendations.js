@@ -220,6 +220,22 @@ export function observedAgentNames(mapId, agents = AGENTS, limit = 4) {
 }
 
 /**
+ * The agents Map Smart weights highest on a map. This is not the same list as
+ * observedAgentNames: weights rank by win rate among agents picked often
+ * enough to count, while "seen most often" ranks by pick rate.
+ */
+export function favouredAgentNames(mapId, agents = AGENTS, limit = 4) {
+  const meta = MAP_META[mapId];
+  if (!meta) return [];
+  const byId = new Map(agents.map((agent) => [agent.id, agent]));
+  return Object.entries(meta.agentWeights)
+    .filter(([, weight]) => weight > 1)
+    .sort((left, right) => right[1] - left[1])
+    .slice(0, limit)
+    .map(([agentId]) => byId.get(agentId)?.name || agentId);
+}
+
+/**
  * Where the snapshot comes from, which matters more than sample size. A
  * coordinated five-stack running a solved meta picks nothing like an ordinary
  * lobby, so a pro snapshot and a ladder snapshot need different warnings.

@@ -10,8 +10,9 @@ import test from "node:test";
 import assert from "node:assert/strict";
 import { readFile } from "node:fs/promises";
 import { JSDOM } from "jsdom";
+import { AGENTS } from "../data/game-data.js";
 
-async function bootPage() {
+async function bootPage({ preferences, session } = {}) {
   const html = await readFile(new URL("../index.html", import.meta.url), "utf8");
   const dom = new JSDOM(html, {
     url: "http://localhost:8000/",
@@ -54,6 +55,13 @@ async function bootPage() {
   window.addEventListener("error", (event) =>
     errors.push(String(event.error || event.message)),
   );
+
+  if (preferences) {
+    localStorage.setItem("agent-roulette:preferences:v3", JSON.stringify(preferences));
+  }
+  if (session) {
+    sessionStorage.setItem("agent-roulette:match-session:v2", JSON.stringify(session));
+  }
 
   // Cache-bust so each test gets a fresh module against its own DOM.
   await import(`../app.js?boot=${Math.random()}`);
@@ -108,4 +116,70 @@ test("every module app.js imports resolves", async () => {
   for (const path of paths) {
     await import(new URL(`../${path.replace("./", "")}`, import.meta.url));
   }
+});
+
+const SQUAD = ["Yoyo", "Jinn", "Karma", "Jack", "Koko"].map((name, index) => ({
+  id: `p${index}`,
+  name,
+  ownedAgentIds: AGENTS.map((agent) => agent.id),
+}));
+
+function seededStorage(stackSize) {
+  return {
+    preferences: {
+      version: 3,
+      preferredMode: "balanced",
+      preferredStructure: 1,
+      selectedMapId: "",
+      savedPlayers: SQUAD,
+    },
+    session: {
+      version: 2,
+      mode: "balanced",
+      selectedMapId: "",
+      currentStackIds: SQUAD.slice(0, stackSize).map((player) => player.id),
+      takenAgentIds: [],
+      matchState: {
+        matchNumber: 1,
+        draftAgentIds: null,
+        pinnedPlayerIds: [],
+        personalRerollsRemaining: {},
+        teamRedrawsRemaining: 3,
+      },
+    },
+  };
+}
+
+const seatNames = ($) =>
+  [...$("#teamSeats").querySelectorAll("b")].map((node) => node.textContent);
+
+test("a full stack shows all five lobby seats after a refresh", async () => {
+  const { $ } = await bootPage(seededStorage(5));
+  assert.deepEqual(seatNames($), SQUAD.map((player) => player.name));
+  assert.equal($("#outsideCount").textContent, "Full stack");
+  assert.equal($("#lobbySection").hidden, true);
+});
+
+test("adding the fifth player replaces the unknown seat", async () => {
+  const { $, window } = await bootPage(seededStorage(4));
+  assert.deepEqual(seatNames($), ["Yoyo", "Jinn", "Karma", "Jack", "?"]);
+  assert.equal($("#outsideCount").textContent, "1 outside · 0 known");
+  $("#addPlayer").click();
+  [...window.document.querySelectorAll(".library-add")]
+    .find((button) => !button.disabled)
+    .click();
+  assert.deepEqual(seatNames($), SQUAD.map((player) => player.name));
+  assert.equal($("#outsideCount").textContent, "Full stack");
+});
+
+test("team needs states a status instead of repeating the role list", async () => {
+  const { $ } = await bootPage(seededStorage(5));
+  assert.equal($("#teamNeedsSignal").textContent, "4 roles to fill");
+  assert.match($("#teamNeeds").textContent, /Duelist · Initiator · Controller · Sentinel/);
+});
+
+test("the feedback link stays hidden until a form URL is configured", async () => {
+  const { $ } = await bootPage();
+  assert.equal($("#feedbackEntry").hidden, true);
+  assert.equal($("#feedbackLink").hasAttribute("href"), false);
 });

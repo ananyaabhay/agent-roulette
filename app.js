@@ -39,6 +39,7 @@ import {
   mapEvidenceCaveat,
   describeMapEvidence,
   observedAgentNames,
+  favouredAgentNames,
 } from "./logic/recommendations.js";
 import { formatDiscordResult } from "./logic/discord.js";
 import {
@@ -57,6 +58,8 @@ const LEGACY_PREFERENCES_KEYS = [
 const SESSION_KEY = "agent-roulette:match-session:v2";
 const LEGACY_SESSION_KEY = "agent-roulette:match-session:v1";
 const SETUP_WIDTH_KEY = "agent-roulette:setup-column-width:v1";
+// Google Forms link here. Empty keeps the footer link hidden.
+const FEEDBACK_URL = "https://forms.gle/6TYTZzZPLWmooqSt5";
 const SETUP_WIDTH_DEFAULT = 410;
 const SETUP_WIDTH_MIN = 360;
 const SETUP_WIDTH_MAX = 480;
@@ -918,6 +921,7 @@ function renderLibrary() {
 function renderTeamSeats() {
   const seats = $("#teamSeats");
   seats.replaceChildren();
+  if (players.length === 0) return;
   players.forEach((player, index) => {
     const seat = element("span", "team-seat stack-seat");
     seat.append(element("b", "", playerLabel(player, index)));
@@ -944,16 +948,22 @@ function renderTeamSeats() {
 function renderLobby() {
   const section = $("#lobbySection");
   const totalOutsideSeats = outsideSeatCount();
+  const knownCount = takenAgentIds.size;
+  // Seats and the count describe the whole lobby, so they render even when a
+  // full stack leaves no outside seats and the picks section below is hidden.
+  $("#outsideCount").textContent = players.length === 0
+    ? ""
+    : totalOutsideSeats === 0
+      ? "Full stack"
+      : `${totalOutsideSeats} outside · ${knownCount} known`;
+  renderTeamSeats();
   section.hidden = totalOutsideSeats === 0;
   if (section.hidden) return;
 
-  const knownCount = takenAgentIds.size;
-  $("#outsideCount").textContent = `${knownCount} of ${totalOutsideSeats} known`;
   $("#outsideNote").textContent =
     knownCount === totalOutsideSeats
       ? "Every outside seat has a known pick. Their agents and roles now count toward this Match."
       : "Marked picks are excluded in every mode. Smart modes also count their roles and do not guess unknown seats.";
-  renderTeamSeats();
 
   lobbyElement.className = `player${lobbyOpen ? " open" : ""}`;
   lobbyElement.replaceChildren();
@@ -1039,10 +1049,12 @@ function renderTeamNeeds() {
       role: need.role,
     })),
   );
+  // The pill is the status; the row below names the roles. Listing the roles
+  // in both places made them read as two different requirements.
   signal.textContent = advisory
     ? "Reference only"
     : required.length
-      ? required.map((need) => need.role).join(" + ")
+      ? `${required.length} ${required.length === 1 ? "role" : "roles"} to fill`
       : "Covered";
   $("#teamNeedsIntro").textContent = advisory
     ? "Reference only — not enforced in Chaos. Ownership, outside picks, and distinct agents are still enforced."
@@ -1185,7 +1197,7 @@ function renderMapIntel() {
     element(
       "p",
       "map-influence",
-      `Map Smart uses ${Math.round(getMapConfidenceInfluence(selectedMapId) * 100)}% influence because this snapshot has ${intel.confidence} confidence. It changes how likely legal agents are to roll, but never overrides ownership, unique-agent rules, or team-role rules.`,
+      `Map Smart leans hardest toward ${new Intl.ListFormat("en", { type: "conjunction" }).format(favouredAgentNames(selectedMapId))}, the best win rates among agents picked often here. That makes them more likely, not guaranteed: a pick still has to be owned, unique, and fit a role the team needs. Influence is ${Math.round(getMapConfidenceInfluence(selectedMapId) * 100)}% because ${intel.confidence === "unstated" ? "this table doesn’t say how many games it covers" : `this snapshot has ${intel.confidence} confidence`}.`,
     ),
   );
   const source = element("p", "map-source");
@@ -1197,7 +1209,7 @@ function renderMapIntel() {
   }).format(new Date(`${intel.updatedAt}T00:00:00Z`));
   source.append(
     document.createTextNode(
-      `Pick rates: patch ${intel.version.split("-")[0]} snapshot, ${snapshotDate}` +
+      `Agent stats: patch ${intel.version.split("-")[0]} snapshot, ${snapshotDate}` +
         (intel.version.split("-")[0] === MAP_POOL_VERSION
           ? " · "
           : ` · map pool is now ${MAP_POOL_VERSION}, so these predate the rotation · `),
@@ -1756,6 +1768,10 @@ if (loadedPreferences.migratedLegacy) savePreferences();
 saveSession();
 // Called before renderAll so an unrelated render failure cannot suppress it.
 renderUpcomingAgent();
+if (/^https:\/\//.test(FEEDBACK_URL)) {
+  $("#feedbackLink").href = FEEDBACK_URL;
+  $("#feedbackEntry").hidden = false;
+}
 renderAll();
 if (storageRecoveryNotice) {
   showNote(
